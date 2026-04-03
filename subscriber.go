@@ -21,18 +21,18 @@ func updateTicket(msg *message.Message) error {
 		return err
 	}
 	if checkTicket.UserID != dummyUser {
-		log.Fatalf("Race condition happened. Ticket %d has been sold to %d\n", ticket.ID, checkTicket.UserID)
+		// Log warning but do NOT crash the server — this is recoverable
+		log.Printf("[WARN] Race condition: ticket %d already sold to user %d, skipping update for user %d",
+			ticket.ID, checkTicket.UserID, ticket.UserID)
 		return nil
 	}
-	// mark the ticket taken
+	// Mark the ticket taken
 	if err := db.Model(&Ticket{}).Where("id = ?", ticket.ID).
-		Updates(
-			Ticket{
-				UserID: ticket.UserID,
-				SoldAt: ticket.SoldAt,
-			}).Error; err != nil {
+		Updates(Ticket{
+			UserID: ticket.UserID,
+			SoldAt: ticket.SoldAt,
+		}).Error; err != nil {
 		return err
 	}
-	log.Printf("Ticket %d is sold to user %d", ticket.ID, ticket.UserID)
 	return nil
 }

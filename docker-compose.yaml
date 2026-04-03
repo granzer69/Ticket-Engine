@@ -29,10 +29,8 @@ services:
              --lower_case_table_names=1
              --max_allowed_packet=128M;
     environment:
-      MYSQL_USER: ming
-      MYSQL_PASSWORD: ming
       MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: test
+      MYSQL_DATABASE: ticketdb
     volumes:
       - mysql_data:/var/lib/mysql
   redis:
