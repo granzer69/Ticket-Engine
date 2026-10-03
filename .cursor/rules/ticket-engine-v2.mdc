@@ -1,0 +1,64 @@
+---
+description: Ticket Engine V2 engineering principles, invariants, and workflow
+alwaysApply: true
+---
+
+# Ticket Engine V2
+
+## Core principles
+
+- Correctness before performance.
+- Preserve the existing architecture unless a change is technically justified.
+- Do not introduce Kafka, Kubernetes, Redis Cluster, microservices, or other infrastructure for resume value.
+- Redis may handle fast atomic allocation/state operations.
+- MySQL remains the durable source of truth for completed bookings.
+- Booking operations must be idempotent (target state; implement incrementally per `docs/V2_PROGRESS.md`).
+- One ticket → at most one successful booking.
+- One user → at most one successful booking unless the API spec changes.
+- Retrying a booking must not create another booking (target; track in progress doc).
+- Application restart must never create additional inventory.
+- Process crashes must not silently lose confirmed bookings (known V1 gap; fix in later phases).
+- Redis/MySQL inconsistencies must be detectable and recoverable.
+- Never claim performance or correctness guarantees without tests proving them.
+
+## Booking invariants
+
+Protect:
+
+1. One ticket → at most one successful booking.
+2. One user → at most one successful booking.
+3. Same idempotent request retry → same booking result.
+4. Inventory cannot increase because of application restart.
+5. Persisted sold tickets cannot exceed seeded inventory.
+6. Successful bookings must eventually become durable in MySQL.
+7. Failed operations must not permanently hide inventory.
+
+## Engineering
+
+- Inspect before modifying.
+- Make the smallest complete change.
+- Follow existing project conventions.
+- Add tests for meaningful behavior changes.
+- Run relevant tests; use `go test -race` where relevant.
+- Do not fabricate test results.
+- Do not hardcode secrets in new code; prefer environment variables.
+- Do not silently ignore errors.
+- Do not modify unrelated components.
+- Do not commit unless the user explicitly requests it.
+- Never use destructive Git commands (`reset --hard`, force push, etc.).
+
+## Workflow
+
+Use specialized agents under `.cursor/agents/` and track phase status in `docs/V2_PROGRESS.md`.
+
+Default model for routine work: Composer 2.5. Escalate only for hard concurrency, reliability, or architecture problems.
+
+Phases: Architect → Implement → Test → Review → update progress. Do not start the next phase until acceptance criteria and reviewer PASS.
+
+## Reference docs
+
+- `docs/V2_SPEC.md` — specification and target architecture
+- `docs/V2_PROGRESS.md` — phase tasks and status
+- `docs/ARCHITECTURE.md` — current vs target diagrams
+- `docs/FAILURE_MATRIX.md` — failure behavior
+- `docs/BENCHMARKS.md` — measurement plan
