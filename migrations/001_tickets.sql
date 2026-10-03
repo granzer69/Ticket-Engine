@@ -1,4 +1,4 @@
--- Ticket Engine schema (V1-compatible; evolved in later phases)
+-- Ticket Engine schema (V1-compatible, evolved in later phases)
 CREATE TABLE IF NOT EXISTS tickets (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT NOT NULL DEFAULT 0,

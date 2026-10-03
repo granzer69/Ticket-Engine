@@ -26,7 +26,12 @@ go run .        # API server
 
 This will start an API server, a MySQL database, and a Redis instance. For simplicity, the backend server runs a separate goroutine that subscribes to buy events and writes corresponding buyers to MySQL asynchronously. Note that each user can buy at most one ticket. If an user buys more than one ticket, the server will return `429 Too Many Requests`.
 ## Testing
-We use [wrk](https://github.com/wg/wrk) to benchmark the performance as well as the correctness under concurrent requests. The following command tells `wrk` to book tickets with 100 threads and 100 open connections. `test.lua` is called per request in order to simulate an unique user.
 ```bash
-wrk -t100 -c100 -d1s --latency -s ./test.lua http://localhost:8080
+make test
+make test-race
+make test-integration   # requires MySQL + Redis
 ```
+
+Load testing uses k6 ([`test.js`](test.js)). After a run, reconcile with [`scripts/post-k6-reconcile.sql`](scripts/post-k6-reconcile.sql).
+
+Legacy `test.lua` targets the old V1 route and is not used for V2 verification.

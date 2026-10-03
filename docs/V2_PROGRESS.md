@@ -33,8 +33,8 @@ Only mark **complete** when acceptance criteria are met, tests executed, and Rev
 - [x] `docker compose config` validates.
 - [x] `go test ./...` passes.
 - [x] `go test -race ./...` passes (unit packages).
-- [x] `go test -tags=integration ./integration/...` — PASS with skip when MySQL/Redis unreachable (2026-10-03 cloud VM)
-- [ ] `docker compose config` + full stack `up` — **blocked**: Docker CLI not installed on cloud VM (verified `which docker` empty; `apt-get install docker.io` unavailable)
+- [x] `go test -tags=integration ./integration/...` — PASS with MySQL/Redis on published ports (2026-10-03 cloud VM).
+- [x] `docker compose config` + `mysql`/`redis` stack `up` — PASS (2026-10-03); **in-compose `seed`/`server` not verified end-to-end** (see blockers below).
 
 ### Tests required
 
@@ -47,12 +47,35 @@ Only mark **complete** when acceptance criteria are met, tests executed, and Rev
 |---------|--------|------|
 | `go test ./...` | PASS | 2026-10-03 |
 | `go test -race ./...` | PASS | 2026-10-03 |
-| `go test -tags=integration ./integration/...` | PASS (skipped MySQL/Redis) | 2026-10-03 |
-| `docker compose config` | Not run — no Docker | 2026-10-03 |
+| `go test -tags=integration ./integration/...` | PASS (MySQL + Redis via `127.0.0.1:3306` / `:6379`) | 2026-10-03 |
+| `docker compose config` | PASS (warn: obsolete top-level `version`) | 2026-10-03 |
+| `docker compose pull` | PASS — `mysql:8.0`, `redis:7-alpine`, `golang:1.22-bookworm` (no custom images) | 2026-10-03 |
+| `docker compose up -d mysql redis` | PASS after Docker install + `vfs` storage driver (overlay mount failed on VM) | 2026-10-03 |
+| `go run . seed` (host → published DB ports) | PASS — 15,000 rows; second run skips insert | 2026-10-03 |
+| Serve start + restart (host `go run .`) | PASS — ticket count stays 15,000; logs show redis sync only (no mint) | 2026-10-03 |
+| `docker compose up seed` / `server` | FAIL — see blockers | 2026-10-03 |
+
+### Compose service analysis (Phase 1)
+
+| Service | `build:` | `image:` | Notes |
+|---------|----------|----------|--------|
+| `mysql` | — | `mysql:8.0` | Init SQL bind-mount: `docker/mysql/init.sql` |
+| `redis` | — | `redis:7-alpine` | Healthcheck `redis-cli ping` |
+| `seed` | — | `golang:1.22-bookworm` | One-shot `go run . seed`; bind-mount repo + `go_mod_cache` volume |
+| `server` | — | `golang:1.22-bookworm` | `go run .` after `seed` completes successfully |
+
+No service uses `build:`; images are pulled only (documented upstream tags).
+
+### Phase 1 blockers / findings (2026-10-03 cloud VM)
+
+1. **Docker not preinstalled** — installed `docker.io` + compose plugin; `dockerd` started manually; default **overlay** storage driver failed container create → workaround: `/etc/docker/daemon.json` `{"storage-driver":"vfs"}`.
+2. **Migration splitter + SQL comment** — naive `;` split broke on semicolons inside `--` comments (fixed: comment lines stripped before split; `migrations/001_tickets.sql` comment simplified; `migrate_test.go` covers regression).
+3. **Compose app services (`seed`/`server`)** — empty `go_mod_cache` volume hit `proxy.golang.org` i/o timeout; after priming cache from host, `seed` container could not dial `mysql:3306` (inter-container traffic loss; host `127.0.0.1:3306` works). Full in-network compose smoke remains **blocked in this VM**; Phase 1 behavior verified via host process + published ports.
+4. **Integration test side effect** — `TestPartialInventoryRefused` truncates/replaces `tickets`; run restart/inventory checks on a dedicated DB or after re-seed.
 
 ### Status
 
-`complete` — code and automated tests verified; **Docker Compose stack smoke not verified** in this environment.
+`complete` — code and automated tests verified; **Docker Compose `seed`/`server` in-network smoke not verified** in this environment (infra/network). MySQL/Redis services and host-path verification PASS.
 
 ---
 

@@ -1,6 +1,7 @@
--- Atomic ticket allocation with per-user idempotency.
+-- Atomic ticket allocation with per-user idempotency and durable enqueue.
 -- KEYS[1] = ticket queue list
 -- KEYS[2] = user booking hash (field: user id, value: ticket id)
+-- KEYS[3] = bookings stream
 -- ARGV[1] = user id string
 --
 -- Returns {status, ticket_id}
@@ -17,4 +18,5 @@ if not ticket then
 end
 
 redis.call('HSET', KEYS[2], ARGV[1], ticket)
+redis.call('XADD', KEYS[3], '*', 'ticket_id', ticket, 'user_id', ARGV[1])
 return {0, ticket}

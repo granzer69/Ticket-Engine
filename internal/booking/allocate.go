@@ -18,6 +18,7 @@ const (
 	StatusSoldOut  = 2
 	KeyQueue       = "tickets"
 	KeyUserBooking = "hash:user"
+	KeyStream      = "bookings.stream"
 )
 
 // Result of an allocation attempt.
@@ -48,7 +49,7 @@ func (a *Allocator) Allocate(ctx context.Context, userID int) (Result, error) {
 		return Result{}, fmt.Errorf("booking: invalid user id %d", userID)
 	}
 	uid := strconv.Itoa(userID)
-	raw, err := a.client.EvalSha(ctx, a.sha, []string{KeyQueue, KeyUserBooking}, uid).Result()
+	raw, err := a.client.EvalSha(ctx, a.sha, []string{KeyQueue, KeyUserBooking, KeyStream}, uid).Result()
 	if err != nil {
 		return Result{}, fmt.Errorf("booking: eval: %w", err)
 	}

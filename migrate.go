@@ -1,11 +1,21 @@
 package main
 
 import (
+	"database/sql"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 )
+
+func migrationColumnExists(sqlDB *sql.DB, table, column string) bool {
+	var count int
+	err := sqlDB.QueryRow(
+		`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+		table, column,
+	).Scan(&count)
+	return err == nil && count > 0
+}
 
 func applyMigrations() {
 	sqlDB, err := db.DB()
@@ -28,6 +38,10 @@ func applyMigrations() {
 		if err != nil {
 			log.Fatalf("migrations: read %s: %v", full, err)
 		}
+		if e.Name() == "002_ticket_state.sql" && migrationColumnExists(sqlDB, "tickets", "state") {
+			log.Printf("skip migration %s (state column exists)", e.Name())
+			continue
+		}
 		stmts := splitSQLStatements(string(body))
 		for _, stmt := range stmts {
 			if _, err := sqlDB.Exec(stmt); err != nil {
@@ -39,8 +53,17 @@ func applyMigrations() {
 }
 
 func splitSQLStatements(sql string) []string {
+	var b strings.Builder
+	for _, line := range strings.Split(sql, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "--") {
+			continue
+		}
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
 	var out []string
-	for _, part := range strings.Split(sql, ";") {
+	for _, part := range strings.Split(b.String(), ";") {
 		s := strings.TrimSpace(part)
 		if s == "" {
 			continue

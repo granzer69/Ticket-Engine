@@ -6,12 +6,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"sync/atomic"
-	"time"
 
-	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/message"
+	"ticketengine/internal/persist"
 )
 
 // JSON response types for structured API output
@@ -33,12 +32,30 @@ type MetricsResponse struct {
 }
 
 func enableCORS(next http.HandlerFunc) http.HandlerFunc {
+	origin := getEnv("TICKET_CORS_ORIGIN", "*")
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-User-Id")
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-User-Id, X-API-Key")
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
+			return
+		}
+		next(w, r)
+	}
+}
+
+func apiKeyMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	required := os.Getenv("TICKET_API_KEY")
+	if required == "" {
+		return next
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-API-Key") != required {
+			writeJSON(w, http.StatusUnauthorized, BookingResponse{
+				Status:  "error",
+				Message: "Invalid API key",
+			})
 			return
 		}
 		next(w, r)
@@ -81,7 +98,8 @@ func ticketHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allocResult, err := ticketAllocator.Allocate(context.Background(), uid)
+	ctx := context.Background()
+	allocResult, err := ticketAllocator.Allocate(ctx, uid)
 	if err != nil {
 		incrBookingFail()
 		log.Printf("booking allocate failed: %v", err)
@@ -102,43 +120,34 @@ func ticketHandler(w http.ResponseWriter, r *http.Request) {
 	ticketID := allocResult.TicketID
 
 	if allocResult.Replay {
-		incrBookingSuccess()
-		writeJSON(w, http.StatusOK, BookingResponse{
-			Status:   "success",
-			TicketID: ticketID,
-			UserID:   uid,
-			Message:  fmt.Sprintf("Ticket %d booked for user %d", ticketID, uid),
-		})
+		if err := ensurePersisted(ctx, ticketID, uid); err != nil {
+			incrBookingFail()
+			log.Printf("replay persist enqueue failed: %v", err)
+			writeJSON(w, http.StatusServiceUnavailable, BookingResponse{
+				Status:  "error",
+				Message: "Booking service temporarily unavailable",
+			})
+			return
+		}
+		writeBookingSuccess(w, ticketID, uid)
 		return
 	}
 
-	// Publish to async worker for MySQL persistence — keeps response fast
-	soldAt := time.Now()
-	payload, err := json.Marshal(&Ticket{
-		ID:     ticketID,
-		UserID: uid,
-		SoldAt: &soldAt,
-	})
+	writeBookingSuccess(w, ticketID, uid)
+}
+
+func ensurePersisted(ctx context.Context, ticketID, userID int) error {
+	sold, err := persist.IsSold(db, ticketID)
 	if err != nil {
-		incrBookingFail()
-		log.Printf("Failed to marshal ticket payload: %v", err)
-		writeJSON(w, http.StatusInternalServerError, BookingResponse{
-			Status:  "error",
-			Message: "Internal Server Error",
-		})
-		return
+		return err
 	}
-	msg := message.NewMessage(watermill.NewUUID(), payload)
-	if err := pubsub.Publish(updateTicketTopic, msg); err != nil {
-		incrBookingFail()
-		log.Printf("Failed to publish ticket update: %v", err)
-		writeJSON(w, http.StatusInternalServerError, BookingResponse{
-			Status:  "error",
-			Message: "Internal Server Error",
-		})
-		return
+	if sold {
+		return nil
 	}
+	return persist.EnqueueReplay(ctx, redisClient, ticketID, userID)
+}
 
+func writeBookingSuccess(w http.ResponseWriter, ticketID, uid int) {
 	incrBookingSuccess()
 	writeJSON(w, http.StatusOK, BookingResponse{
 		Status:   "success",

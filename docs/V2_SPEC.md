@@ -17,13 +17,12 @@ Single Go process (`main.go`, `router.go`, `init.go`, `subscriber.go`, `model.go
 
 Frontend: `frontend/Dashboard` calls the API; other frontend bundles are mostly UI demos.
 
-## 3. Current booking lifecycle (verified)
+## 3. Current booking lifecycle (verified on V2 branch)
 
-1. `HINCRBY hash:user <uid> 1` — proceed only if result is `1`
-2. `LPOP tickets` — atomic pop of ticket id
-3. Publish JSON ticket to GoChannel
-4. HTTP 200 to client
-5. Worker `updateTicket`: `SELECT user_id`, then `UPDATE` if still `user_id = 0` (dummy unsold sentinel)
+1. Redis Lua: idempotent `HGET` on `hash:user`, else `LPOP` + `HSET` + `XADD bookings.stream`
+2. HTTP 200 to client (new allocation or idempotent replay)
+3. On replay: enqueue persist job if MySQL row not yet `sold`
+4. Stream consumer: conditional `UPDATE tickets SET state='sold' ... WHERE state='available'`
 
 There is **no** explicit `reserved` state in Redis or MySQL.
 

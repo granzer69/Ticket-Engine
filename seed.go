@@ -28,7 +28,7 @@ func SeedInventory() error {
 	log.Printf("seed: inserting %d tickets into MySQL...", ticketCount)
 	var batch []Ticket
 	for i := 0; i < ticketCount; i++ {
-		batch = append(batch, Ticket{UserID: dummyUser})
+		batch = append(batch, Ticket{State: "available"})
 	}
 	if err := db.CreateInBatches(batch, 1000).Error; err != nil {
 		return fmt.Errorf("seed: insert: %w", err)
@@ -43,7 +43,7 @@ func syncRedisQueue(forceRebuild bool) error {
 	ctx := context.Background()
 
 	var tickets []Ticket
-	if err := db.Where("user_id = ?", dummyUser).Find(&tickets).Error; err != nil {
+	if err := db.Where("state = ?", "available").Find(&tickets).Error; err != nil {
 		return fmt.Errorf("redis sync: load available: %w", err)
 	}
 

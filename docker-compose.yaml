@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   mysql:
     image: mysql:8.0
@@ -30,6 +28,9 @@ services:
     restart: unless-stopped
     ports:
       - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -43,6 +44,7 @@ services:
       - .:/app
       - go_mod_cache:/go/pkg/mod
     environment:
+      GOPROXY: https://proxy.golang.org,direct
       MYSQL_HOST: mysql:3306
       MYSQL_USER: ticket
       MYSQL_PASSWORD: ticket
@@ -53,7 +55,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: ["go", "run", ".", "seed"]
+    command: ["sh", "-c", "go mod download && go run . seed"]
     restart: "no"
 
   server:
@@ -66,6 +68,7 @@ services:
       - .:/app
       - go_mod_cache:/go/pkg/mod
     environment:
+      GOPROXY: https://proxy.golang.org,direct
       MYSQL_HOST: mysql:3306
       MYSQL_USER: ticket
       MYSQL_PASSWORD: ticket
@@ -75,8 +78,13 @@ services:
     depends_on:
       seed:
         condition: service_completed_successfully
-    command: ["go", "run", "."]
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["sh", "-c", "go mod download && go run ."]
 
 volumes:
   mysql_data:
+  redis_data:
   go_mod_cache:
