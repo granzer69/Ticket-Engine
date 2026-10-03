@@ -42,36 +42,130 @@ func (c *Consumer) EnsureGroup(ctx context.Context) error {
 }
 
 func (c *Consumer) Run(ctx context.Context) {
+	reclaimTicker := time.NewTicker(5 * time.Second)
+	defer reclaimTicker.Stop()
+
 	for {
-		if ctx.Err() != nil {
+		select {
+		case <-ctx.Done():
+			return
+		case <-reclaimTicker.C:
+			c.reclaimPending(ctx)
+		default:
+			c.readAndProcess(ctx, ">")
+		}
+	}
+}
+
+func (c *Consumer) reclaimPending(ctx context.Context) {
+	ext, err := c.redis.XPendingExt(ctx, &redis.XPendingExtArgs{
+		Stream: StreamKey,
+		Group:  ConsumerGroup,
+		Start:  "-",
+		End:    "+",
+		Count:  10,
+	}).Result()
+	if err != nil && err != redis.Nil {
+		log.Printf("[persist] xpendingext: %v", err)
+		return
+	}
+	var ids []string
+	for _, p := range ext {
+		if p.Idle >= PendingMinIdle {
+			ids = append(ids, p.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	msgs, err := c.redis.XClaim(ctx, &redis.XClaimArgs{
+		Stream:   StreamKey,
+		Group:    ConsumerGroup,
+		Consumer: c.name,
+		MinIdle:  PendingMinIdle,
+		Messages: ids,
+	}).Result()
+	if err != nil && err != redis.Nil {
+		log.Printf("[persist] xclaim: %v", err)
+		return
+	}
+	for _, msg := range msgs {
+		c.processMessage(ctx, msg)
+	}
+}
+
+func (c *Consumer) readAndProcess(ctx context.Context, streamID string) {
+	streams, err := c.redis.XReadGroup(ctx, &redis.XReadGroupArgs{
+		Group:    ConsumerGroup,
+		Consumer: c.name,
+		Streams:  []string{StreamKey, streamID},
+		Count:    10,
+		Block:    time.Second * 2,
+	}).Result()
+	if err == redis.Nil {
+		return
+	}
+	if err != nil {
+		log.Printf("[persist] xreadgroup: %v", err)
+		time.Sleep(time.Second)
+		return
+	}
+	for _, s := range streams {
+		for _, msg := range s.Messages {
+			c.processMessage(ctx, msg)
+		}
+	}
+}
+
+func (c *Consumer) processMessage(ctx context.Context, msg redis.XMessage) {
+	if err := c.handleMessage(ctx, msg); err != nil {
+		if isPermanentError(err) {
+			c.moveToDLQ(ctx, msg, err)
+			_ = c.redis.XAck(ctx, StreamKey, ConsumerGroup, msg.ID).Err()
 			return
 		}
-		streams, err := c.redis.XReadGroup(ctx, &redis.XReadGroupArgs{
-			Group:    ConsumerGroup,
-			Consumer: c.name,
-			Streams:  []string{StreamKey, ">"},
-			Count:    10,
-			Block:    time.Second * 2,
-		}).Result()
-		if err == redis.Nil {
-			continue
+		attempts, incErr := c.redis.Incr(ctx, retryKey(msg.ID)).Result()
+		if incErr == nil {
+			c.redis.Expire(ctx, retryKey(msg.ID), 24*time.Hour)
 		}
-		if err != nil {
-			log.Printf("[persist] xreadgroup: %v", err)
-			time.Sleep(time.Second)
-			continue
+		if attempts >= int64(MaxHandleAttempts) {
+			log.Printf("[persist] max attempts for %s: %v", msg.ID, err)
+			c.moveToDLQ(ctx, msg, err)
+			_ = c.redis.XAck(ctx, StreamKey, ConsumerGroup, msg.ID).Err()
+			_ = c.redis.Del(ctx, retryKey(msg.ID)).Err()
+			return
 		}
-		for _, s := range streams {
-			for _, msg := range s.Messages {
-				if err := c.handleMessage(ctx, msg); err != nil {
-					log.Printf("[persist] handle %s: %v", msg.ID, err)
-					continue
-				}
-				if err := c.redis.XAck(ctx, StreamKey, ConsumerGroup, msg.ID).Err(); err != nil {
-					log.Printf("[persist] xack %s: %v", msg.ID, err)
-				}
-			}
-		}
+		log.Printf("[persist] handle %s (attempt %d): %v", msg.ID, attempts, err)
+		return
+	}
+	if err := c.redis.XAck(ctx, StreamKey, ConsumerGroup, msg.ID).Err(); err != nil {
+		log.Printf("[persist] xack %s: %v", msg.ID, err)
+	}
+	_ = c.redis.Del(ctx, retryKey(msg.ID)).Err()
+}
+
+func retryKey(msgID string) string {
+	return "persist:retry:" + msgID
+}
+
+func isPermanentError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "ticket_id:") || strings.Contains(s, "user_id:")
+}
+
+func (c *Consumer) moveToDLQ(ctx context.Context, msg redis.XMessage, cause error) {
+	values := map[string]interface{}{
+		"source_id": msg.ID,
+		"error":     cause.Error(),
+	}
+	for k, v := range msg.Values {
+		values[k] = v
+	}
+	if err := c.redis.XAdd(ctx, &redis.XAddArgs{Stream: DLQStreamKey, Values: values}).Err(); err != nil {
+		log.Printf("[persist] dlq add: %v", err)
 	}
 }
 

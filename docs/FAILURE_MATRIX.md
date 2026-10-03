@@ -6,7 +6,7 @@ Legend: **V1** = current behavior; **Target** = V2 end state; **Phase** = when w
 |---------|-----------|-------------|-----------------|----------|------|-------|
 | Redis unavailable | `LPOP`/`HINCRBY` error | Often 404/429 | 503, no mutation | Retry client | Integration Redis down | 2+ |
 | MySQL unavailable | Worker `UPDATE` error | HTTP 200 already sent | Allocated + stream pending | Worker retry | Pause MySQL | 3+ |
-| Worker crash mid-handler | Stream pending / lost msg | GoChannel message lost | Pending entry reclaimed | `XAUTOCLAIM` | Kill mid-worker | 3+ |
+| Worker crash mid-handler | Stream pending / lost msg | GoChannel message lost | Pending entry reclaimed | `XClaim` idle reclaim | Kill mid-worker | 3 done |
 | API crash after 200 | Client got ticket id | MySQL may be stale | Stream retains job | Consumer on restart | Kill API | 3+ |
 | Process restart | Boot logs | Could mint rows (fixed P1) | No mint; reconcile | Seed/sync policy | Restart test | 1/4 |
 | Duplicate request | Same user id | 200 same ticket (Phase 2) | 200 same ticket | Lua `HGET` replay | `internal/booking` tests + k6 retry | 2 done |
