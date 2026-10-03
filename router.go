@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill"
@@ -71,7 +72,7 @@ func ticketHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	uid, err := strconv.Atoi(uidStr)
-	if err != nil {
+	if err != nil || uid <= 0 {
 		incrBookingFail()
 		writeJSON(w, http.StatusBadRequest, BookingResponse{
 			Status:  "error",
@@ -80,19 +81,17 @@ func ticketHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check whether the current user has already bought a ticket (atomic via Redis HINCRBY)
-	if result, err := redisClient.HIncrBy(context.Background(), hashUser, uidStr, 1).Result(); err != nil || result != 1 {
+	allocResult, err := ticketAllocator.Allocate(context.Background(), uid)
+	if err != nil {
 		incrBookingFail()
-		writeJSON(w, http.StatusTooManyRequests, BookingResponse{
+		log.Printf("booking allocate failed: %v", err)
+		writeJSON(w, http.StatusServiceUnavailable, BookingResponse{
 			Status:  "error",
-			Message: "User already booked a ticket",
+			Message: "Booking service temporarily unavailable",
 		})
 		return
 	}
-
-	// Atomically pop a ticket from the Redis queue — this is the critical path
-	ticketIdStr, err := redisClient.LPop(context.Background(), queueTicket).Result()
-	if err != nil {
+	if allocResult.SoldOut {
 		incrBookingFail()
 		writeJSON(w, http.StatusNotFound, BookingResponse{
 			Status:  "error",
@@ -100,12 +99,15 @@ func ticketHandler(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	ticketID, err := strconv.Atoi(ticketIdStr)
-	if err != nil {
-		incrBookingFail()
-		writeJSON(w, http.StatusInternalServerError, BookingResponse{
-			Status:  "error",
-			Message: "Internal Server Error",
+	ticketID := allocResult.TicketID
+
+	if allocResult.Replay {
+		incrBookingSuccess()
+		writeJSON(w, http.StatusOK, BookingResponse{
+			Status:   "success",
+			TicketID: ticketID,
+			UserID:   uid,
+			Message:  fmt.Sprintf("Ticket %d booked for user %d", ticketID, uid),
 		})
 		return
 	}
@@ -169,8 +171,8 @@ func ticketCountHandler(w http.ResponseWriter, r *http.Request) {
 
 func metricsHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, MetricsResponse{
-		TotalRequests:   totalRequests,
-		BookingSuccess:  bookingSuccess,
-		BookingFailures: bookingFailures,
+		TotalRequests:   atomic.LoadInt64(&totalRequests),
+		BookingSuccess:  atomic.LoadInt64(&bookingSuccess),
+		BookingFailures: atomic.LoadInt64(&bookingFailures),
 	})
 }

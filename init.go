@@ -71,8 +71,9 @@ func initMySQL() {
 	sqlDB.SetMaxIdleConns(100)
 	log.Println("DB connected (pool: 200 open, 100 idle)")
 
+	applyMigrations()
 	if err := db.AutoMigrate(&Ticket{}); err != nil {
-		log.Fatalf("failed to run MySQL migrations: %v", err)
+		log.Fatalf("failed to run GORM schema sync: %v", err)
 	}
 }
 
@@ -103,62 +104,9 @@ func initPubSub() {
 	)
 }
 
+// prepareData is deprecated; use SeedInventory (CLI) and prepareRuntimeData (serve).
 func prepareData() {
-	var count int64
-	if err := db.Model(&Ticket{}).Where("user_id = ?", dummyUser).Count(&count).Error; err != nil {
-		log.Fatal(err)
-	}
-	if count < int64(ticketCount) {
-		neededTickets := int(int64(ticketCount) - count)
-		log.Printf("Inserting %d tickets into MySQL...", neededTickets)
-		var newTickets []Ticket
-		for i := 0; i < neededTickets; i++ {
-			newTickets = append(newTickets, Ticket{UserID: dummyUser})
-		}
-		if err := db.CreateInBatches(newTickets, 1000).Error; err != nil {
-			log.Fatalf("failed to insert dummy tickets: %v", err)
-		}
-	}
-
-	tickets := make([]Ticket, 0, ticketCount)
-	if err := db.Where("user_id = ?", dummyUser).Limit(ticketCount).Find(&tickets).Error; err != nil {
-		log.Fatal(err)
-	}
-
-	redisTiketLen, err := redisClient.LLen(context.Background(), queueTicket).Result()
-	if err != nil {
-		log.Fatal(err)
-	}
-	if redisTiketLen != int64(ticketCount) {
-		if err := redisClient.Del(context.Background(), queueTicket).Err(); err != nil {
-			log.Fatal(err)
-		}
-
-		// Also clear user booking hash so tests are repeatable
-		if err := redisClient.Del(context.Background(), hashUser).Err(); err != nil {
-			log.Fatal(err)
-		}
-
-		// Batch push to Redis
-		var ticketIds []interface{}
-		for _, t := range tickets {
-			ticketIds = append(ticketIds, t.ID)
-		}
-
-		for i := 0; i < len(ticketIds); i += 1000 {
-			end := i + 1000
-			if end > len(ticketIds) {
-				end = len(ticketIds)
-			}
-			if err := redisClient.LPush(context.Background(), queueTicket, ticketIds[i:end]...).Err(); err != nil {
-				log.Fatalf("failed to push to Redis: %v", err)
-			}
-		}
-
-		log.Printf("loaded %d tickets to Redis\n", ticketCount)
-	} else {
-		log.Printf("Redis already has %d tickets, skipping reload", redisTiketLen)
-	}
+	prepareRuntimeData()
 }
 
 func incrRequests()       { atomic.AddInt64(&totalRequests, 1) }

@@ -1,0 +1,3 @@
+CREATE USER IF NOT EXISTS 'ticket'@'%' IDENTIFIED BY 'ticket';
+GRANT ALL PRIVILEGES ON ticketdb.* TO 'ticket'@'%';
+FLUSH PRIVILEGES;

@@ -1,42 +1,82 @@
-version: '3'
+version: '3.8'
 
 services:
-  server:
-    image: golang:1.15.2
-    restart: always
-    ports:
-      - 8080:8080
-    volumes:
-      - .:/app
-      - $GOPATH/pkg/mod:/go/pkg/mod
-    working_dir: /app
-    environment:
-      MYSQL_HOST: mysql:3306
-      MYSQL_USER: ming
-      MYSQL_PASSWORD: ming
-      MYSQL_DATABASE: test
-      REDIS_HOST: redis:6379
-      HTTP_PORT: 8080
-    command: go run .
   mysql:
     image: mysql:8.0
-    restart: always
+    restart: unless-stopped
     ports:
-      - 3306:3306
-    command: --default-authentication-plugin=mysql_native_password
-             --character-set-server=utf8mb4
-             --collation-server=utf8mb4_general_ci
-             --lower_case_table_names=1
-             --max_allowed_packet=128M;
+      - "3306:3306"
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+      - --lower_case_table_names=1
+      - --max_allowed_packet=128M
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: ticketdb
     volumes:
       - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
   redis:
-    image: redis:5.0.1-alpine
+    image: redis:7-alpine
+    restart: unless-stopped
     ports:
-      - 6379:6379
-  
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  seed:
+    image: golang:1.22-bookworm
+    working_dir: /app
+    volumes:
+      - .:/app
+      - go_mod_cache:/go/pkg/mod
+    environment:
+      MYSQL_HOST: mysql:3306
+      MYSQL_USER: ticket
+      MYSQL_PASSWORD: ticket
+      MYSQL_DATABASE: ticketdb
+      REDIS_HOST: redis:6379
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["go", "run", ".", "seed"]
+    restart: "no"
+
+  server:
+    image: golang:1.22-bookworm
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    working_dir: /app
+    volumes:
+      - .:/app
+      - go_mod_cache:/go/pkg/mod
+    environment:
+      MYSQL_HOST: mysql:3306
+      MYSQL_USER: ticket
+      MYSQL_PASSWORD: ticket
+      MYSQL_DATABASE: ticketdb
+      REDIS_HOST: redis:6379
+      HTTP_PORT: "8080"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    command: ["go", "run", "."]
+
 volumes:
   mysql_data:
+  go_mod_cache:

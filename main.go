@@ -5,16 +5,23 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sync/atomic"
 	"time"
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "seed" {
+		runSeedCommand()
+		return
+	}
+
 	log.Println("Starting system initialization...")
 	initMySQL()
 	initRedis()
+	initBookingAllocator()
 	initPubSub()
-	prepareData()
+	prepareRuntimeData()
 
 	log.Println("Initialization complete. Starting pubsub router...")
 	go func() {
@@ -59,4 +66,14 @@ func main() {
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
+}
+
+func runSeedCommand() {
+	log.Println("Running inventory seed (explicit command)...")
+	initMySQL()
+	initRedis()
+	if err := SeedInventory(); err != nil {
+		log.Fatalf("seed failed: %v", err)
+	}
+	log.Println("Seed complete.")
 }
