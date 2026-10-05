@@ -17,7 +17,7 @@ For each claim:
 
 | ID | Claim | Test package / command | Evidence |
 |----|-------|------------------------|----------|
-| S7-API-1 | API key required when configured | `go test -run TestAPIKey -count=1 ./...` | *Pending* |
+| S7-API-1 | API key required when configured | `go test -run TestAPIKey -count=1 ./...` | Pending CI verification |
 | S7-CORS-1 | CORS allows only configured origin | `go test -run TestCORS -count=1 ./...` | *Pending* |
 | S7-REDIS-1 | Redis AUTH when configured | `go test -tags=integration -run TestRedisAuth ./integration/...` | *Pending* |
 | S7-LOG-1 | Logs omit secrets and raw user ids | `go test -run TestLogRedaction -count=1 ./...` | *Pending* |
@@ -44,11 +44,11 @@ For each claim:
 - Invalid key → HTTP 401.
 - Valid key → HTTP 200 (with valid `X-User-Id` and inventory).
 
-**Actual result:** *Not recorded yet.*
+**Actual result (local, 2026-10-05):** `go test -count=1 -run 'TestAPIKey' ./...` — PASS (`ticketengine`, `internal/security`). Missing and invalid `X-API-Key` return HTTP 401 with body `Unauthorized`; valid key allows booking; env unset keeps `/book` open.
 
-**CI evidence:** *Add workflow run link after merge.*
+**CI evidence:** Pending CI verification
 
-**Known limitations:** When `TICKET_API_KEY` is unset, `/book` remains open (dev default).
+**Known limitations:** When `TICKET_API_KEY` is unset, `/book` remains open (dev default). API key does not authenticate `X-User-Id` (application identifier only).
 
 ---
 

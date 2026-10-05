@@ -12,6 +12,7 @@ import (
 
 	"ticketengine/internal/booking"
 	"ticketengine/internal/persist"
+	"ticketengine/internal/security"
 )
 
 // JSON response types for structured API output
@@ -52,10 +53,10 @@ func apiKeyMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		return next
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("X-API-Key") != required {
+		if !security.APIKeyValid(r.Header.Get("X-API-Key"), required) {
 			writeJSON(w, http.StatusUnauthorized, BookingResponse{
 				Status:  "error",
-				Message: "Invalid API key",
+				Message: "Unauthorized",
 			})
 			return
 		}
