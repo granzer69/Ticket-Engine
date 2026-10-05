@@ -29,13 +29,19 @@ type Consumer struct {
 	db       *gorm.DB
 	name     string
 	inflight sync.WaitGroup
+	sem      chan struct{}
 }
 
 func NewConsumer(rdb *redis.Client, db *gorm.DB, consumerName string) *Consumer {
 	if consumerName == "" {
 		consumerName = ConsumerName
 	}
-	return &Consumer{redis: rdb, db: db, name: consumerName}
+	parallel := MaxParallelHandlers
+	if parallel < 1 {
+		parallel = 1
+	}
+	sem := make(chan struct{}, parallel)
+	return &Consumer{redis: rdb, db: db, name: consumerName, sem: sem}
 }
 
 func (c *Consumer) EnsureGroup(ctx context.Context) error {
@@ -48,11 +54,7 @@ func (c *Consumer) EnsureGroup(ctx context.Context) error {
 
 // GroupPendingCount returns total pending messages for the consumer group.
 func (c *Consumer) GroupPendingCount(ctx context.Context) (int64, error) {
-	pending, err := c.redis.XPending(ctx, StreamKey, ConsumerGroup).Result()
-	if err != nil {
-		return 0, err
-	}
-	return pending.Count, nil
+	return GroupPendingCountRDB(ctx, c.redis)
 }
 
 func (c *Consumer) Run(ctx context.Context) {
@@ -85,6 +87,11 @@ func (c *Consumer) Run(ctx context.Context) {
 	if !c.waitInflight(ShutdownDrainTimeout) {
 		log.Printf("[persist] shutdown drain timed out after %s", ShutdownDrainTimeout)
 	}
+}
+
+// WaitIdle blocks until in-flight handlers finish or timeout elapses.
+func (c *Consumer) WaitIdle(timeout time.Duration) bool {
+	return c.waitInflight(timeout)
 }
 
 func (c *Consumer) waitInflight(timeout time.Duration) bool {
@@ -206,8 +213,15 @@ func parseXStreamMessages(raw interface{}) ([]redis.XMessage, error) {
 
 func (c *Consumer) processMessage(ctx context.Context, msg redis.XMessage) {
 	c.inflight.Add(1)
-	defer c.inflight.Done()
+	go func() {
+		defer c.inflight.Done()
+		c.sem <- struct{}{}
+		defer func() { <-c.sem }()
+		c.processMessageSync(ctx, msg)
+	}()
+}
 
+func (c *Consumer) processMessageSync(ctx context.Context, msg redis.XMessage) {
 	delivery, err := c.messageDeliveryCount(ctx, msg.ID)
 	if err != nil {
 		log.Printf("[persist] delivery count %s: %v", msg.ID, err)

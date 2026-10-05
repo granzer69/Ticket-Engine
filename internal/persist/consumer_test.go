@@ -143,6 +143,9 @@ func TestReclaimStalePending(t *testing.T) {
 
 	mr.SetTime(start.Add(200 * time.Millisecond))
 	c.reclaimStale(ctx)
+	if !c.WaitIdle(2 * time.Second) {
+		t.Fatal("reclaim handlers did not finish")
+	}
 
 	var state string
 	if err := db.Raw(`SELECT state FROM tickets WHERE id = 11`).Scan(&state).Error; err != nil {
@@ -199,6 +202,9 @@ func TestConsumerReadsOwnPending(t *testing.T) {
 	}
 
 	c.readAndProcess(ctx, "0", 0)
+	if !c.WaitIdle(2 * time.Second) {
+		t.Fatal("pending handlers did not finish")
+	}
 
 	var state string
 	if err := db.Raw(`SELECT state FROM tickets WHERE id = 12`).Scan(&state).Error; err != nil {
@@ -246,7 +252,7 @@ func TestMovesFailedMessageToDLQ(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	c.processMessage(ctx, read[0].Messages[0])
+	c.processMessageSync(ctx, read[0].Messages[0])
 
 	pending, err := c.GroupPendingCount(ctx)
 	if err != nil {

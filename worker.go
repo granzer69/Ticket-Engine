@@ -16,16 +16,28 @@ var runPersistConsumer = func(ctx context.Context, c *persist.Consumer) {
 }
 
 func startPersistWorkerLoop(ctx context.Context) {
-	consumer := persist.NewConsumer(redisClient, db, persist.ConsumerName)
+	name := resolvePersistConsumerName()
+	consumer := persist.NewConsumer(redisClient, db, name)
 	if err := consumer.EnsureGroup(ctx); err != nil {
 		log.Fatalf("persist consumer group: %v", err)
 	}
-	log.Printf("Persist consumer running (name=%s)", persist.ConsumerName)
+	log.Printf("Persist consumer running (name=%s)", name)
 	runPersistConsumer(ctx, consumer)
+}
+
+func resolvePersistConsumerName() string {
+	if v := os.Getenv("TICKET_PERSIST_CONSUMER_NAME"); v != "" {
+		return v
+	}
+	if h := os.Getenv("HOSTNAME"); h != "" {
+		return "worker-" + h
+	}
+	return persist.ConsumerName
 }
 
 func runWorkerCommand() {
 	log.Println("Starting persist worker...")
+	os.Setenv("TICKET_ENGINE_ROLE", "worker")
 	initMySQL()
 	initRedis()
 
@@ -40,7 +52,7 @@ func runWorkerCommand() {
 		drainCtx, drainCancel := context.WithTimeout(context.Background(), persist.ShutdownDrainTimeout)
 		defer drainCancel()
 
-		consumer := persist.NewConsumer(redisClient, db, persist.ConsumerName)
+		consumer := persist.NewConsumer(redisClient, db, resolvePersistConsumerName())
 		pending, err := consumer.GroupPendingCount(drainCtx)
 		if err != nil {
 			log.Printf("worker shutdown: group pending count: %v", err)

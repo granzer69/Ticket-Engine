@@ -12,6 +12,12 @@ const (
 // MaxDeliveryAttempts moves a message to DLQStreamKey after this many deliveries with handle errors.
 var MaxDeliveryAttempts int64 = 5
 
+// MaxParallelHandlers limits concurrent handleMessage calls per consumer process.
+var MaxParallelHandlers = 4
+
+// MaxReadyPendingCount makes /readyz fail when group pending exceeds this value.
+var MaxReadyPendingCount int64 = 500
+
 // ReclaimMinIdle must exceed worst-case handleMessage duration so live workers are not reclaimed.
 var ReclaimMinIdle = 2 * time.Minute
 

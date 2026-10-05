@@ -212,3 +212,7 @@ No service uses `build:`; images are pulled only (documented upstream tags).
 ## V3 — DLQ (Composer phase 3)
 
 **Status:** `complete` — `MaxDeliveryAttempts` then `XADD` `bookings.dlq` + `XACK`; `TestPersistDLQ` + unit DLQ test.
+
+## V3 — Worker scale-out (Composer phase 4)
+
+**Status:** `complete` — `TICKET_PERSIST_CONSUMER_NAME` / `HOSTNAME` consumer names, bounded parallel handlers, worker-sized MySQL pool (`TICKET_ENGINE_ROLE=worker`), `/readyz` fails when stream pending exceeds `MaxReadyPendingCount`; `TestReadyzStreamPending`, `TestTwoWorkersNoDoubleSell`.
