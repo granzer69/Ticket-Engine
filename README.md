@@ -23,8 +23,10 @@ Traditional databases struggle when very large numbers of users attempt to book 
 Flow (current implementation):
 1. Client sends `POST /book` with `X-User-Id`.
 2. Redis Lua allocation is used for atomic allocation + idempotent replay behavior.
-3. Booking events are written to a Redis Stream and consumed by a worker.
-4. Worker persists sold ticket ownership to MySQL.
+3. Booking events are written to a Redis Stream.
+4. A separate **worker** process (`go run . worker`) consumes the stream and persists sold ticket ownership to MySQL.
+
+**Important:** the API server (`go run .`) does **not** run the persist consumer. A serve-only deployment accepts bookings into Redis but does not write `sold` rows to MySQL until a worker is running.
 
 This design gives fast allocation while preserving eventual consistency in the system of record.
 
@@ -42,7 +44,7 @@ This design gives fast allocation while preserving eventual consistency in the s
 | `GET` | `/tickets/count` | Remaining tickets in Redis queue |
 | `GET` | `/metrics` | Request/success/failure counters |
 | `GET` | `/healthz` | Liveness probe |
-| `GET` | `/readyz` | Readiness probe (Redis + MySQL + consumer checks) |
+| `GET` | `/readyz` | Readiness probe (Redis + MySQL; consumer check is worker-only in a split deployment) |
 
 Example booking request:
 
@@ -61,7 +63,8 @@ This starts:
 - `mysql` (MySQL 8)
 - `redis` (Redis 7)
 - one-shot `seed` service (`go run . seed`)
-- `server` service (`go run .`)
+- `server` service (`go run .`) — HTTP API only
+- `worker` service (`go run . worker`) — stream consumer (required for MySQL persistence)
 
 Default API endpoint: `http://localhost:8080`
 
@@ -69,9 +72,12 @@ Default API endpoint: `http://localhost:8080`
 If you already run MySQL and Redis locally:
 
 ```bash
-go run . seed   # run once on empty DB
-go run .        # start API server
+go run . seed    # run once on empty DB
+go run . worker  # persist consumer (run alongside API)
+go run .         # start API server
 ```
+
+Or run API + worker together: `make dev`
 
 Useful command:
 

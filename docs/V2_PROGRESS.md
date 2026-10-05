@@ -170,3 +170,9 @@ No service uses `build:`; images are pulled only (documented upstream tags).
 **Objective:** End-to-end reviewer sign-off.
 
 **Status:** `not_started`
+
+---
+
+## V3 — Worker/API split (Composer phase 1)
+
+**Status:** `in_progress` — `go run . worker` is the only persist consumer entrypoint; Compose/Makefile/CI start worker alongside serve.

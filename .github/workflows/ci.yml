@@ -34,6 +34,24 @@ jobs:
         run: |
           go test ./...
           go test -race ./...
+      - name: Seed inventory
+        env:
+          MYSQL_HOST: 127.0.0.1:3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: root
+          MYSQL_DATABASE: ticketdb
+          REDIS_HOST: 127.0.0.1:6379
+        run: go run . seed
+      - name: Start persist worker
+        env:
+          MYSQL_HOST: 127.0.0.1:3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: root
+          MYSQL_DATABASE: ticketdb
+          REDIS_HOST: 127.0.0.1:6379
+        run: |
+          go run . worker &
+          echo $! > /tmp/ticket-worker.pid
       - name: Integration tests
         env:
           MYSQL_HOST: 127.0.0.1:3306
@@ -42,3 +60,6 @@ jobs:
           MYSQL_DATABASE: ticketdb
           REDIS_HOST: 127.0.0.1:6379
         run: go test -tags=integration ./integration/...
+      - name: Stop persist worker
+        if: always()
+        run: kill "$(cat /tmp/ticket-worker.pid)" 2>/dev/null || true

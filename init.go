@@ -20,14 +20,14 @@ const (
 )
 
 var (
-	db          *gorm.DB
-	redisClient *redis.Client
-	mysqlHost   = getEnv("MYSQL_HOST", "localhost:3306")
-	mysqlUser   = getEnv("MYSQL_USER", "root")
+	db            *gorm.DB
+	redisClient   *redis.Client
+	mysqlHost     = getEnv("MYSQL_HOST", "localhost:3306")
+	mysqlUser     = getEnv("MYSQL_USER", "root")
 	mysqlPassword = getEnv("MYSQL_PASSWORD", "root")
 	mysqlDatabase = getEnv("MYSQL_DATABASE", "ticketdb")
-	redisHost   = getEnv("REDIS_HOST", "localhost:6379")
-	httpPort    = getEnv("HTTP_PORT", "8080")
+	redisHost     = getEnv("REDIS_HOST", "localhost:6379")
+	httpPort      = getEnv("HTTP_PORT", "8080")
 
 	totalRequests   int64
 	bookingSuccess  int64
@@ -42,6 +42,9 @@ func getEnv(key, fallback string) string {
 }
 
 func initMySQL() {
+	if db != nil {
+		return
+	}
 	var err error
 	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8mb4&parseTime=True&loc=Local", mysqlUser, mysqlPassword, mysqlHost, mysqlDatabase)
 	db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
@@ -66,6 +69,9 @@ func initMySQL() {
 }
 
 func initRedis() {
+	if redisClient != nil {
+		return
+	}
 	redisClient = redis.NewClient(&redis.Options{
 		Addr:     redisHost,
 		DB:       0,
