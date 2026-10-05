@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"sync/atomic"
 
+	"ticketengine/internal/booking"
 	"ticketengine/internal/persist"
 )
 
@@ -137,11 +138,11 @@ func ticketHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func ensurePersisted(ctx context.Context, ticketID, userID int) error {
-	sold, err := persist.IsSold(db, ticketID)
+	redisTicket, ok, err := booking.TicketForUser(ctx, redisClient, userID)
 	if err != nil {
 		return err
 	}
-	if sold {
+	if ok && redisTicket == ticketID {
 		return nil
 	}
 	return persist.EnqueueReplay(ctx, redisClient, ticketID, userID)

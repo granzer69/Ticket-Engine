@@ -216,3 +216,7 @@ No service uses `build:`; images are pulled only (documented upstream tags).
 ## V3 — Worker scale-out (Composer phase 4)
 
 **Status:** `complete` — `TICKET_PERSIST_CONSUMER_NAME` / `HOSTNAME` consumer names, bounded parallel handlers, worker-sized MySQL pool (`TICKET_ENGINE_ROLE=worker`), `/readyz` fails when stream pending exceeds `MaxReadyPendingCount`; `TestReadyzStreamPending`, `TestTwoWorkersNoDoubleSell`.
+
+## V3 — Redis-only replay (Composer phase 5)
+
+**Status:** `complete` — idempotent `/book` replay uses `hash:user` in `ensurePersisted` (no MySQL read); `TestBookReplaySkipsMySQL`.
