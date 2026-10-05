@@ -6,7 +6,11 @@ const (
 	StreamKey     = "bookings.stream"
 	ConsumerGroup = "bookings-mysql"
 	ConsumerName  = "worker-1"
+	DLQStreamKey  = "bookings.dlq"
 )
+
+// MaxDeliveryAttempts moves a message to DLQStreamKey after this many deliveries with handle errors.
+var MaxDeliveryAttempts int64 = 5
 
 // ReclaimMinIdle must exceed worst-case handleMessage duration so live workers are not reclaimed.
 var ReclaimMinIdle = 2 * time.Minute

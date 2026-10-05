@@ -129,14 +129,14 @@ No service uses `build:`; images are pulled only (documented upstream tags).
 | Consumer group + MySQL `sold` update | complete |
 | Worker/API split (V3 phase 1) | complete |
 | PEL reclaim (`XAUTOCLAIM`) + shutdown drain (V3 phase 2) | complete |
-| DLQ after delivery cap (V3 phase 3) | not_started |
+| DLQ after delivery cap (V3 phase 3) | complete |
 
 ### Acceptance criteria
 
 - [x] Bookings persist via Redis Stream consumer (not GoChannel).
 - [ ] Crash mid-handler: pending entry reclaimed; ticket becomes `sold` once (`TestPersistRecovery` — requires MySQL+Redis; SKIP in agent VM 2026-10-05).
 - [x] Duplicate delivery is idempotent (same user/ticket `UPDATE` guard).
-- [ ] DLQ for poison messages (deferred to V3 phase 3).
+- [x] DLQ for poison messages after `MaxDeliveryAttempts` (`TestPersistDLQ`).
 
 ### Verification log
 
@@ -208,3 +208,7 @@ No service uses `build:`; images are pulled only (documented upstream tags).
 ## V3 — PEL reclaim and shutdown (Composer phase 2)
 
 **Status:** `complete` — periodic `XAUTOCLAIM`, pending `0` replay, graceful drain with pending log on SIGTERM; `TestPersistRecovery` + `internal/persist` reclaim tests.
+
+## V3 — DLQ (Composer phase 3)
+
+**Status:** `complete` — `MaxDeliveryAttempts` then `XADD` `bookings.dlq` + `XACK`; `TestPersistDLQ` + unit DLQ test.

@@ -208,13 +208,62 @@ func (c *Consumer) processMessage(ctx context.Context, msg redis.XMessage) {
 	c.inflight.Add(1)
 	defer c.inflight.Done()
 
+	delivery, err := c.messageDeliveryCount(ctx, msg.ID)
+	if err != nil {
+		log.Printf("[persist] delivery count %s: %v", msg.ID, err)
+	}
+
 	if err := c.handleMessage(ctx, msg); err != nil {
-		log.Printf("[persist] handle %s: %v", msg.ID, err)
+		if delivery >= MaxDeliveryAttempts {
+			if dlqErr := c.moveToDLQ(ctx, msg, err, delivery); dlqErr != nil {
+				log.Printf("[persist] dlq %s: %v", msg.ID, dlqErr)
+				return
+			}
+			log.Printf("[persist] moved %s to %s after %d deliveries: %v", msg.ID, DLQStreamKey, delivery, err)
+			return
+		}
+		log.Printf("[persist] handle %s (delivery %d): %v", msg.ID, delivery, err)
 		return
 	}
 	if err := c.redis.XAck(ctx, StreamKey, ConsumerGroup, msg.ID).Err(); err != nil {
 		log.Printf("[persist] xack %s: %v", msg.ID, err)
 	}
+}
+
+func (c *Consumer) messageDeliveryCount(ctx context.Context, msgID string) (int64, error) {
+	ext, err := c.redis.XPendingExt(ctx, &redis.XPendingExtArgs{
+		Stream: StreamKey,
+		Group:  ConsumerGroup,
+		Start:  msgID,
+		End:    msgID,
+		Count:  1,
+	}).Result()
+	if err != nil {
+		return 0, err
+	}
+	if len(ext) == 0 {
+		return 1, nil
+	}
+	return ext[0].RetryCount, nil
+}
+
+func (c *Consumer) moveToDLQ(ctx context.Context, msg redis.XMessage, cause error, delivery int64) error {
+	values := map[string]interface{}{
+		"source_id":       msg.ID,
+		"ticket_id":       fmt.Sprint(msg.Values["ticket_id"]),
+		"user_id":         fmt.Sprint(msg.Values["user_id"]),
+		"delivery_count":  delivery,
+		"error":           cause.Error(),
+		"consumer":        c.name,
+		"moved_at_unix":   time.Now().Unix(),
+	}
+	if err := c.redis.XAdd(ctx, &redis.XAddArgs{
+		Stream: DLQStreamKey,
+		Values: values,
+	}).Err(); err != nil {
+		return err
+	}
+	return c.redis.XAck(ctx, StreamKey, ConsumerGroup, msg.ID).Err()
 }
 
 func (c *Consumer) handleMessage(ctx context.Context, msg redis.XMessage) error {

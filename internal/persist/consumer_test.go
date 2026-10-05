@@ -208,3 +208,59 @@ func TestConsumerReadsOwnPending(t *testing.T) {
 		t.Fatalf("expected sold from pending replay, got %s", state)
 	}
 }
+
+func TestMovesFailedMessageToDLQ(t *testing.T) {
+	oldMax := MaxDeliveryAttempts
+	MaxDeliveryAttempts = 1
+	t.Cleanup(func() { MaxDeliveryAttempts = oldMax })
+
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis: %v", err)
+	}
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	ctx := context.Background()
+
+	db, err := gorm.Open(sqlite.Open("file:dlq?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("sqlite: %v", err)
+	}
+	if err := db.Exec(`CREATE TABLE tickets (id INTEGER PRIMARY KEY, user_id INTEGER, state TEXT, sold_at DATETIME)`).Error; err != nil {
+		t.Fatalf("schema: %v", err)
+	}
+
+	c := NewConsumer(rdb, db, "dlq-worker")
+	if err := c.EnsureGroup(ctx); err != nil {
+		t.Fatalf("group: %v", err)
+	}
+	if err := rdb.XAdd(ctx, &redis.XAddArgs{
+		Stream: StreamKey,
+		Values: map[string]interface{}{"ticket_id": "404", "user_id": "9"},
+	}).Err(); err != nil {
+		t.Fatalf("xadd: %v", err)
+	}
+
+	read, err := rdb.XReadGroup(ctx, &redis.XReadGroupArgs{
+		Group: ConsumerGroup, Consumer: "dlq-worker", Streams: []string{StreamKey, ">"}, Count: 1,
+	}).Result()
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	c.processMessage(ctx, read[0].Messages[0])
+
+	pending, err := c.GroupPendingCount(ctx)
+	if err != nil {
+		t.Fatalf("pending: %v", err)
+	}
+	if pending != 0 {
+		t.Fatalf("expected no pending after dlq, got %d", pending)
+	}
+
+	dlqLen, err := rdb.XLen(ctx, DLQStreamKey).Result()
+	if err != nil {
+		t.Fatalf("xlen dlq: %v", err)
+	}
+	if dlqLen != 1 {
+		t.Fatalf("expected 1 dlq entry, got %d", dlqLen)
+	}
+}
