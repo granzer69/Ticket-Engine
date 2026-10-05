@@ -6,4 +6,6 @@ UPDATE tickets SET state = 'sold' WHERE user_id IS NOT NULL AND user_id != 0;
 
 UPDATE tickets SET user_id = NULL WHERE user_id = 0 OR state = 'available';
 
+-- 001 created a non-unique index with this name; replace it for one-user-one-booking.
+ALTER TABLE tickets DROP INDEX idx_tickets_user_id;
 CREATE UNIQUE INDEX idx_tickets_user_id ON tickets (user_id);
