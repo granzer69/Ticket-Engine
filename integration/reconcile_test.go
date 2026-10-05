@@ -4,6 +4,7 @@ package integration_test
 
 import (
 	"context"
+	"errors"
 	"os/exec"
 	"strings"
 	"testing"
@@ -61,8 +62,14 @@ func TestReconcileCLIReadOnly(t *testing.T) {
 	cmd.Dir = moduleRootDir()
 	cmd.Env = persistWorkerEnv()
 	out, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatalf("expected reconcile exit error, out=%s", out)
+	if err != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() == reconcile.ExitOperational {
+			t.Fatalf("reconcile command failed: %v\n%s", err, out)
+		}
+	}
+	if !strings.Contains(string(out), "RECONCILE RESULT:") {
+		t.Fatalf("missing reconcile header in output:\n%s", out)
 	}
 	afterQ, _ := rdb.LLen(ctx, booking.KeyQueue).Result()
 	afterH, _ := rdb.HLen(ctx, booking.KeyUserBooking).Result()
