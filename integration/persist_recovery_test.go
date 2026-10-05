@@ -101,6 +101,24 @@ func TestPersistRecovery(t *testing.T) {
 	if !recovered {
 		t.Fatal("ticket not sold after recovery window")
 	}
+	pendingDeadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(pendingDeadline) {
+		pending, err := recoverConsumer.GroupPendingCount(ctx)
+		if err != nil {
+			t.Fatalf("pending: %v", err)
+		}
+		if pending == 0 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	pending, err := recoverConsumer.GroupPendingCount(ctx)
+	if err != nil {
+		t.Fatalf("pending: %v", err)
+	}
+	if pending != 0 {
+		t.Fatalf("expected no group pending after recovery, got %d", pending)
+	}
 	recoverCancel()
 
 	var state string
