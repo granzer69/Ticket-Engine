@@ -85,6 +85,9 @@ func TestPersistRecovery(t *testing.T) {
 	recoverConsumer := persist.NewConsumer(rdb, gdb, "integration-recover")
 	go recoverConsumer.Run(recoverCtx)
 
+	var pending int64
+	var pendingErr error
+
 	deadline := time.Now().Add(12 * time.Second)
 	recovered := false
 	for time.Now().Before(deadline) {
@@ -103,18 +106,18 @@ func TestPersistRecovery(t *testing.T) {
 	}
 	pendingDeadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(pendingDeadline) {
-		pending, err := recoverConsumer.GroupPendingCount(ctx)
-		if err != nil {
-			t.Fatalf("pending: %v", err)
+		pending, pendingErr = recoverConsumer.GroupPendingCount(ctx)
+		if pendingErr != nil {
+			t.Fatalf("pending: %v", pendingErr)
 		}
 		if pending == 0 {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	pending, err := recoverConsumer.GroupPendingCount(ctx)
-	if err != nil {
-		t.Fatalf("pending: %v", err)
+	pending, pendingErr = recoverConsumer.GroupPendingCount(ctx)
+	if pendingErr != nil {
+		t.Fatalf("pending: %v", pendingErr)
 	}
 	if pending != 0 {
 		t.Fatalf("expected no group pending after recovery, got %d", pending)
@@ -139,13 +142,5 @@ func TestPersistRecovery(t *testing.T) {
 	}
 	if soldCount != 1 {
 		t.Fatalf("expected one sold row, got %d", soldCount)
-	}
-
-	pending, err := consumer.GroupPendingCount(ctx)
-	if err != nil {
-		t.Fatalf("pending: %v", err)
-	}
-	if pending != 0 {
-		t.Fatalf("expected no group pending after recovery, got %d", pending)
 	}
 }
