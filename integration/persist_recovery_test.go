@@ -15,6 +15,15 @@ import (
 )
 
 func TestPersistRecovery(t *testing.T) {
+	oldIdle := persist.ReclaimMinIdle
+	oldInterval := persist.ReclaimInterval
+	persist.ReclaimMinIdle = 50 * time.Millisecond
+	persist.ReclaimInterval = 100 * time.Millisecond
+	t.Cleanup(func() {
+		persist.ReclaimMinIdle = oldIdle
+		persist.ReclaimInterval = oldInterval
+	})
+
 	rdb := redis.NewClient(&redis.Options{Addr: envDefault("REDIS_HOST", "127.0.0.1:6379")})
 	ctx := context.Background()
 	if err := rdb.Ping(ctx).Err(); err != nil {
