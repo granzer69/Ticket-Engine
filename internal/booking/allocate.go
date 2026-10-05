@@ -86,6 +86,22 @@ func parseAllocateResult(raw interface{}) (Result, error) {
 	}
 }
 
+// TicketForUser returns the ticket id stored in Redis for userID, if any.
+func TicketForUser(ctx context.Context, client *redis.Client, userID int) (int, bool, error) {
+	raw, err := client.HGet(ctx, KeyUserBooking, strconv.Itoa(userID)).Result()
+	if err == redis.Nil {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	tid, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, false, fmt.Errorf("booking: bad hash ticket id %q: %w", raw, err)
+	}
+	return tid, true, nil
+}
+
 func toInt(v interface{}) (int, error) {
 	switch n := v.(type) {
 	case int64:
