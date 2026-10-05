@@ -118,11 +118,11 @@ func startPersistWorkerProcess(t *testing.T) func() {
 func ensureTicketsTable(t *testing.T, gdb *gorm.DB) {
 	if err := gdb.Exec(`CREATE TABLE IF NOT EXISTS tickets (
 		id BIGINT AUTO_INCREMENT PRIMARY KEY,
-		user_id BIGINT NOT NULL DEFAULT 0,
+		user_id BIGINT NULL,
 		created_at BIGINT NULL,
 		sold_at DATETIME(3) NULL,
 		state VARCHAR(16) NOT NULL DEFAULT 'available',
-		INDEX idx_tickets_user_id (user_id),
+		UNIQUE INDEX idx_tickets_user_id (user_id),
 		INDEX idx_tickets_state (state)
 	)`).Error; err != nil {
 		t.Fatalf("ensure table: %v", err)

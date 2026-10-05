@@ -39,7 +39,7 @@ func TestPersistRecovery(t *testing.T) {
 	if err := gdb.Exec(`DELETE FROM tickets WHERE id = ?`, ticketID).Error; err != nil {
 		t.Fatalf("delete ticket: %v", err)
 	}
-	if err := gdb.Exec(`INSERT INTO tickets (id, user_id, state) VALUES (?, 0, 'available')`, ticketID).Error; err != nil {
+	if err := gdb.Exec(`INSERT INTO tickets (id, user_id, state) VALUES (?, NULL, 'available')`, ticketID).Error; err != nil {
 		t.Fatalf("insert ticket: %v", err)
 	}
 
