@@ -30,8 +30,6 @@ func TestPersistRecovery(t *testing.T) {
 		t.Skipf("redis not available: %v", err)
 	}
 	gdb := openIntegrationMySQL(t)
-	sqlDB, _ := gdb.DB()
-	defer sqlDB.Close()
 	ensureTicketsTable(t, gdb)
 
 	const ticketID = 88001
@@ -39,7 +37,7 @@ func TestPersistRecovery(t *testing.T) {
 	if err := gdb.Exec(`DELETE FROM tickets WHERE id = ?`, ticketID).Error; err != nil {
 		t.Fatalf("delete ticket: %v", err)
 	}
-	if err := gdb.Exec(`INSERT INTO tickets (id, user_id, state) VALUES (?, 0, 'available')`, ticketID).Error; err != nil {
+	if err := gdb.Exec(`INSERT INTO tickets (id, user_id, state) VALUES (?, NULL, 'available')`, ticketID).Error; err != nil {
 		t.Fatalf("insert ticket: %v", err)
 	}
 
@@ -65,7 +63,7 @@ func TestPersistRecovery(t *testing.T) {
 	t.Cleanup(func() { persist.MessagePause = nil })
 
 	runCtx, runCancel := context.WithCancel(ctx)
-	consumer := persist.NewConsumer(rdb, gdb, persist.ConsumerName)
+	consumer := persist.NewConsumer(rdb, gdb, "integration-pause")
 	if err := consumer.EnsureGroup(ctx); err != nil {
 		t.Fatalf("ensure group: %v", err)
 	}
@@ -79,23 +77,52 @@ func TestPersistRecovery(t *testing.T) {
 	}
 
 	runCancel()
+	persist.MessagePause = nil
 	time.Sleep(300 * time.Millisecond)
 
 	recoverCtx, recoverCancel := context.WithTimeout(ctx, 15*time.Second)
 	defer recoverCancel()
-	go persist.NewConsumer(rdb, gdb, persist.ConsumerName).Run(recoverCtx)
+	recoverConsumer := persist.NewConsumer(rdb, gdb, "integration-recover")
+	go recoverConsumer.Run(recoverCtx)
+
+	var pending int64
+	var pendingErr error
 
 	deadline := time.Now().Add(12 * time.Second)
+	recovered := false
 	for time.Now().Before(deadline) {
 		sold, err := persist.IsSold(gdb, ticketID)
 		if err != nil {
 			t.Fatalf("is sold: %v", err)
 		}
 		if sold {
+			recovered = true
 			break
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
+	if !recovered {
+		t.Fatal("ticket not sold after recovery window")
+	}
+	pendingDeadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(pendingDeadline) {
+		pending, pendingErr = recoverConsumer.GroupPendingCount(ctx)
+		if pendingErr != nil {
+			t.Fatalf("pending: %v", pendingErr)
+		}
+		if pending == 0 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	pending, pendingErr = recoverConsumer.GroupPendingCount(ctx)
+	if pendingErr != nil {
+		t.Fatalf("pending: %v", pendingErr)
+	}
+	if pending != 0 {
+		t.Fatalf("expected no group pending after recovery, got %d", pending)
+	}
+	recoverCancel()
 
 	var state string
 	var uid int64
@@ -115,13 +142,5 @@ func TestPersistRecovery(t *testing.T) {
 	}
 	if soldCount != 1 {
 		t.Fatalf("expected one sold row, got %d", soldCount)
-	}
-
-	pending, err := consumer.GroupPendingCount(ctx)
-	if err != nil {
-		t.Fatalf("pending: %v", err)
-	}
-	if pending != 0 {
-		t.Fatalf("expected no group pending after recovery, got %d", pending)
 	}
 }

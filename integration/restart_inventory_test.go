@@ -20,7 +20,7 @@ func TestRestartDoesNotMintInventory(t *testing.T) {
 
 	const target = 100
 	for i := 0; i < target; i++ {
-		if err := gdb.Exec("INSERT INTO tickets (user_id) VALUES (0)").Error; err != nil {
+		if err := gdb.Exec("INSERT INTO tickets (user_id, state) VALUES (NULL, 'available')").Error; err != nil {
 			t.Fatalf("insert: %v", err)
 		}
 	}

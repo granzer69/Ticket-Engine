@@ -20,8 +20,6 @@ func TestTwoWorkersNoDoubleSell(t *testing.T) {
 		t.Skipf("redis not available: %v", err)
 	}
 	gdb := openIntegrationMySQL(t)
-	sqlDB, _ := gdb.DB()
-	defer sqlDB.Close()
 	ensureTicketsTable(t, gdb)
 
 	const ticketA = 88101
@@ -30,7 +28,7 @@ func TestTwoWorkersNoDoubleSell(t *testing.T) {
 		if err := gdb.Exec(`DELETE FROM tickets WHERE id = ?`, id).Error; err != nil {
 			t.Fatalf("delete: %v", err)
 		}
-		if err := gdb.Exec(`INSERT INTO tickets (id, user_id, state) VALUES (?, 0, 'available')`, id).Error; err != nil {
+		if err := gdb.Exec(`INSERT INTO tickets (id, user_id, state) VALUES (?, NULL, 'available')`, id).Error; err != nil {
 			t.Fatalf("insert: %v", err)
 		}
 	}
