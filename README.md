@@ -79,7 +79,7 @@ go run .         # start API server
 
 Or run API + worker together: `make dev`
 
-Useful command:
+Read-only drift check (no Redis/MySQL mutations; exit `0` clean, `1` drift, `2` error):
 
 ```bash
 go run . reconcile

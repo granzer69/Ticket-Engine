@@ -155,9 +155,23 @@ No service uses `build:`; images are pulled only (documented upstream tags).
 
 ## Phase 4 — Inventory Reconciliation
 
-**Objective:** Rebuild rules; no destructive reset of buyer state.
+**Objective:** Read-only operator reconcile (`go run . reconcile`); no destructive reset of buyer state.
 
-**Status:** `not_started`
+**Status:** `in_progress` (V3 Slice 6 — read-only drift report)
+
+### Reconcile command (Slice 6)
+
+- **Read-only:** no Redis/MySQL/stream/PEL mutations (queue rebuild remains `seed` / `TICKET_ENGINE_REDIS_SYNC` on serve only).
+- **Checks:** Redis `tickets` queue vs MySQL `available` (adjusted for in-flight stream/hash allocations), `hash:user` vs MySQL ownership, duplicate buyers, orphan allocations, stream pending (EXPECTED / STALE / SUSPICIOUS / UNKNOWN), DLQ length.
+- **Exit codes:** `0` clean, `1` drift, `2` operational error (DB/Redis/query failure).
+- **Output:** `RECONCILE RESULT: CLEAN` or `DRIFT DETECTED` with sections.
+
+### Verification log (Slice 6)
+
+| Command | Result | Date |
+|---------|--------|------|
+| `go test -count=1 -run TestReconcile ./internal/reconcile/...` | PASS | 2026-10-05 |
+| `go test -tags=integration -count=1 -run TestReconcileDrift ./integration/...` | SKIP if no Redis/MySQL | 2026-10-05 |
 
 ---
 

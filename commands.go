@@ -2,7 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"os"
+
+	"ticketengine/internal/reconcile"
 )
 
 func runSeedCommand() {
@@ -18,8 +22,13 @@ func runSeedCommand() {
 func runReconcileCommand() {
 	initMySQL()
 	initRedis()
-	if err := RunReconciliation(context.Background()); err != nil {
-		log.Fatalf("reconcile failed: %v", err)
+	rep, err := RunReconciliation(context.Background())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "RECONCILE ERROR: %v\n", err)
+		os.Exit(reconcile.ExitOperational)
 	}
-	log.Println("reconcile complete")
+	fmt.Print(rep.Format())
+	if rep.HasDrift() {
+		os.Exit(reconcile.ExitDrift)
+	}
 }

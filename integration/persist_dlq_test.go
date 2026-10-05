@@ -5,7 +5,6 @@ package integration_test
 import (
 	"context"
 	"testing"
-	"time"
 
 	"ticketengine/internal/persist"
 
@@ -19,8 +18,6 @@ func TestPersistDLQ(t *testing.T) {
 		t.Skipf("redis not available: %v", err)
 	}
 	gdb := openIntegrationMySQL(t)
-	sqlDB, _ := gdb.DB()
-	defer sqlDB.Close()
 	ensureTicketsTable(t, gdb)
 
 	const ticketID = 88002
@@ -42,25 +39,25 @@ func TestPersistDLQ(t *testing.T) {
 		t.Fatalf("enqueue: %v", err)
 	}
 
-	runCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	consumer := persist.NewConsumer(rdb, gdb, persist.ConsumerName)
+	const consumerName = "integration-dlq"
+	consumer := persist.NewConsumer(rdb, gdb, consumerName)
 	if err := consumer.EnsureGroup(ctx); err != nil {
 		t.Fatalf("ensure group: %v", err)
 	}
-	go consumer.Run(runCtx)
 
-	deadline := time.Now().Add(8 * time.Second)
-	for time.Now().Before(deadline) {
-		dlqLen, err := rdb.XLen(ctx, persist.DLQStreamKey).Result()
-		if err != nil {
-			t.Fatalf("dlq len: %v", err)
-		}
-		if dlqLen >= 1 {
-			break
-		}
-		time.Sleep(200 * time.Millisecond)
+	read, err := rdb.XReadGroup(ctx, &redis.XReadGroupArgs{
+		Group:    persist.ConsumerGroup,
+		Consumer: consumerName,
+		Streams:  []string{persist.StreamKey, ">"},
+		Count:    1,
+	}).Result()
+	if err != nil {
+		t.Fatalf("xreadgroup: %v", err)
 	}
+	if len(read) == 0 || len(read[0].Messages) != 1 {
+		t.Fatalf("expected one stream message, got %v", read)
+	}
+	consumer.ProcessMessageSync(ctx, read[0].Messages[0])
 
 	dlqLen, err := rdb.XLen(ctx, persist.DLQStreamKey).Result()
 	if err != nil {

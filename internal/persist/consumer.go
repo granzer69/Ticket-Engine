@@ -221,6 +221,11 @@ func (c *Consumer) processMessage(ctx context.Context, msg redis.XMessage) {
 	}()
 }
 
+// ProcessMessageSync applies one stream message synchronously (integration tests).
+func (c *Consumer) ProcessMessageSync(ctx context.Context, msg redis.XMessage) {
+	c.processMessageSync(ctx, msg)
+}
+
 func (c *Consumer) processMessageSync(ctx context.Context, msg redis.XMessage) {
 	delivery, err := c.messageDeliveryCount(ctx, msg.ID)
 	if err != nil {
