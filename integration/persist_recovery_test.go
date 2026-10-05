@@ -30,8 +30,6 @@ func TestPersistRecovery(t *testing.T) {
 		t.Skipf("redis not available: %v", err)
 	}
 	gdb := openIntegrationMySQL(t)
-	sqlDB, _ := gdb.DB()
-	defer sqlDB.Close()
 	ensureTicketsTable(t, gdb)
 
 	const ticketID = 88001
@@ -65,7 +63,7 @@ func TestPersistRecovery(t *testing.T) {
 	t.Cleanup(func() { persist.MessagePause = nil })
 
 	runCtx, runCancel := context.WithCancel(ctx)
-	consumer := persist.NewConsumer(rdb, gdb, persist.ConsumerName)
+	consumer := persist.NewConsumer(rdb, gdb, "integration-pause")
 	if err := consumer.EnsureGroup(ctx); err != nil {
 		t.Fatalf("ensure group: %v", err)
 	}
@@ -83,19 +81,26 @@ func TestPersistRecovery(t *testing.T) {
 
 	recoverCtx, recoverCancel := context.WithTimeout(ctx, 15*time.Second)
 	defer recoverCancel()
-	go persist.NewConsumer(rdb, gdb, persist.ConsumerName).Run(recoverCtx)
+	recoverConsumer := persist.NewConsumer(rdb, gdb, "integration-recover")
+	go recoverConsumer.Run(recoverCtx)
 
 	deadline := time.Now().Add(12 * time.Second)
+	recovered := false
 	for time.Now().Before(deadline) {
 		sold, err := persist.IsSold(gdb, ticketID)
 		if err != nil {
 			t.Fatalf("is sold: %v", err)
 		}
 		if sold {
+			recovered = true
 			break
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
+	if !recovered {
+		t.Fatal("ticket not sold after recovery window")
+	}
+	recoverCancel()
 
 	var state string
 	var uid int64

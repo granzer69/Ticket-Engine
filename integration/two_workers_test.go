@@ -20,8 +20,6 @@ func TestTwoWorkersNoDoubleSell(t *testing.T) {
 		t.Skipf("redis not available: %v", err)
 	}
 	gdb := openIntegrationMySQL(t)
-	sqlDB, _ := gdb.DB()
-	defer sqlDB.Close()
 	ensureTicketsTable(t, gdb)
 
 	const ticketA = 88101
