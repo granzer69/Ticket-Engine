@@ -39,6 +39,9 @@ func applyMigrations() {
 			log.Fatalf("migrations: read %s: %v", full, err)
 		}
 		if e.Name() == "002_ticket_state.sql" && migrationColumnExists(sqlDB, "tickets", "state") {
+			if err := apply002IndexUpgrade(sqlDB); err != nil {
+				log.Fatalf("migrations: exec %s index upgrade: %v", e.Name(), err)
+			}
 			log.Printf("skip migration %s (state column exists)", e.Name())
 			continue
 		}
@@ -50,6 +53,23 @@ func applyMigrations() {
 		}
 		log.Printf("applied migration %s", e.Name())
 	}
+}
+
+func apply002IndexUpgrade(sqlDB *sql.DB) error {
+	// Idempotent fix when 002 partially applied (state added but unique index step failed).
+	if _, err := sqlDB.Exec(`ALTER TABLE tickets MODIFY user_id BIGINT NULL`); err != nil {
+		return err
+	}
+	if _, err := sqlDB.Exec(`DROP INDEX idx_tickets_user_id ON tickets`); err != nil {
+		if !strings.Contains(err.Error(), "1091") && !strings.Contains(strings.ToLower(err.Error()), "check that it exists") {
+			return err
+		}
+	}
+	_, err := sqlDB.Exec(`CREATE UNIQUE INDEX idx_tickets_user_id ON tickets (user_id)`)
+	if err != nil && strings.Contains(err.Error(), "1061") {
+		return nil
+	}
+	return err
 }
 
 func splitSQLStatements(sql string) []string {

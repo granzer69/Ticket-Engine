@@ -58,9 +58,10 @@ func initMySQL() {
 	if err != nil {
 		log.Fatalf("failed to get MySQL db object: %v", err)
 	}
-	sqlDB.SetMaxOpenConns(200)
-	sqlDB.SetMaxIdleConns(100)
-	log.Println("DB connected (pool: 200 open, 100 idle)")
+	maxOpen, maxIdle := mysqlPoolLimits()
+	sqlDB.SetMaxOpenConns(maxOpen)
+	sqlDB.SetMaxIdleConns(maxIdle)
+	log.Printf("DB connected (pool: %d open, %d idle)", maxOpen, maxIdle)
 
 	applyMigrations()
 	if err := db.AutoMigrate(&Ticket{}); err != nil {
