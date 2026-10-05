@@ -36,7 +36,18 @@ func runWorkerCommand() {
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
-		log.Println("worker shutdown signal received")
+
+		drainCtx, drainCancel := context.WithTimeout(context.Background(), persist.ShutdownDrainTimeout)
+		defer drainCancel()
+
+		consumer := persist.NewConsumer(redisClient, db, persist.ConsumerName)
+		pending, err := consumer.GroupPendingCount(drainCtx)
+		if err != nil {
+			log.Printf("worker shutdown: group pending count: %v", err)
+		} else {
+			log.Printf("worker shutdown signal received (group_pending=%d), draining up to %s", pending, persist.ShutdownDrainTimeout)
+		}
+
 		cancel()
 	}()
 
