@@ -77,6 +77,7 @@ func TestPersistRecovery(t *testing.T) {
 	}
 
 	runCancel()
+	persist.MessagePause = nil
 	time.Sleep(300 * time.Millisecond)
 
 	recoverCtx, recoverCancel := context.WithTimeout(ctx, 15*time.Second)
