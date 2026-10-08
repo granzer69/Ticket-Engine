@@ -17,7 +17,7 @@ For each claim:
 
 | ID | Claim | Test package / command | Evidence |
 |----|-------|------------------------|----------|
-| S7-API-1 | API key required when configured | `go test -run TestAPIKey -count=1 ./...` | Pending CI verification |
+| S7-API-1 | API key required when configured | `go test -run TestAPIKey -count=1 ./...` | Local PASS (claim-tests branch); CI pending |
 | S7-CORS-1 | CORS allows only configured origin | `go test -run TestCORS -count=1 ./...` | *Pending* |
 | S7-REDIS-1 | Redis AUTH when configured | `go test -tags=integration -run TestRedisAuth ./integration/...` | *Pending* |
 | S7-LOG-1 | Logs omit secrets and raw user ids | `go test -run TestLogRedaction -count=1 ./...` | *Pending* |

@@ -105,6 +105,65 @@ func TestAPIKey_Invalid(t *testing.T) {
 	}
 }
 
+func TestAPIKey_NotRequiredOnPublicRoutes(t *testing.T) {
+	const key = "slice7-test-api-key"
+	t.Setenv("TICKET_API_KEY", key)
+
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis: %v", err)
+	}
+	t.Cleanup(mr.Close)
+	redisClient = redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	ctx := context.Background()
+	if err := redisClient.LPush(ctx, booking.KeyQueue, "9", "8").Err(); err != nil {
+		t.Fatalf("lpush: %v", err)
+	}
+
+	metricsReq := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	metricsRec := httptest.NewRecorder()
+	metricsHandler(metricsRec, metricsReq)
+	if metricsRec.Code != http.StatusOK {
+		t.Fatalf("metrics status %d body %s", metricsRec.Code, metricsRec.Body.String())
+	}
+
+	countReq := httptest.NewRequest(http.MethodGet, "/tickets/count", nil)
+	countRec := httptest.NewRecorder()
+	ticketCountHandler(countRec, countReq)
+	if countRec.Code != http.StatusOK {
+		t.Fatalf("tickets/count status %d body %s", countRec.Code, countRec.Body.String())
+	}
+	if !strings.Contains(countRec.Body.String(), `"remaining":2`) {
+		t.Fatalf("unexpected count body %s", countRec.Body.String())
+	}
+
+	bookHandler := setupAPIKeyBookHandler(t)
+	bookReq := httptest.NewRequest(http.MethodPost, "/book", bytes.NewReader(nil))
+	bookReq.Header.Set(httpUserHeader, "1")
+	bookRec := httptest.NewRecorder()
+	bookHandler(bookRec, bookReq)
+	if bookRec.Code != http.StatusUnauthorized {
+		t.Fatalf("book without key status %d want 401", bookRec.Code)
+	}
+}
+
+func TestBookHandlerIdempotentHTTP_WithAPIKey(t *testing.T) {
+	const key = "slice7-idempotent-key"
+	t.Setenv("TICKET_API_KEY", key)
+	handler := setupAPIKeyBookHandler(t)
+
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/book", bytes.NewReader(nil))
+		req.Header.Set(httpUserHeader, "77")
+		req.Header.Set("X-API-Key", key)
+		rec := httptest.NewRecorder()
+		handler(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("request %d status %d body %s", i, rec.Code, rec.Body.String())
+		}
+	}
+}
+
 func TestAPIKey_OpenWhenEnvUnset(t *testing.T) {
 	t.Setenv("TICKET_API_KEY", "")
 	handler := setupAPIKeyBookHandler(t)

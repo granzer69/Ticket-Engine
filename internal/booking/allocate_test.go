@@ -137,6 +137,50 @@ func TestConcurrentUsersUniqueTickets(t *testing.T) {
 	}
 }
 
+func TestAllocateOneUserOneTicket(t *testing.T) {
+	alloc, mr := newTestAllocator(t, "201", "202")
+	ctx := context.Background()
+
+	first, err := alloc.Allocate(ctx, 99)
+	if err != nil || first.Replay || first.TicketID != 201 {
+		t.Fatalf("first: %+v err=%v", first, err)
+	}
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	remaining, err := client.LLen(ctx, KeyQueue).Result()
+	if err != nil {
+		t.Fatalf("llen: %v", err)
+	}
+	if remaining != 1 {
+		t.Fatalf("expected 1 ticket left after first allocate, got %d", remaining)
+	}
+
+	replay, err := alloc.Allocate(ctx, 99)
+	if err != nil || !replay.Replay || replay.TicketID != 201 {
+		t.Fatalf("replay: %+v err=%v", replay, err)
+	}
+	remaining, err = client.LLen(ctx, KeyQueue).Result()
+	if err != nil {
+		t.Fatalf("llen after replay: %v", err)
+	}
+	if remaining != 1 {
+		t.Fatalf("replay must not consume queue; expected 1 left, got %d", remaining)
+	}
+}
+
+func TestAllocateOneTicketOneWinner(t *testing.T) {
+	alloc, _ := newTestAllocator(t, "301")
+	ctx := context.Background()
+
+	winner, err := alloc.Allocate(ctx, 1)
+	if err != nil || winner.SoldOut || winner.TicketID != 301 {
+		t.Fatalf("winner: %+v err=%v", winner, err)
+	}
+	loser, err := alloc.Allocate(ctx, 2)
+	if err != nil || !loser.SoldOut {
+		t.Fatalf("second user: %+v err=%v", loser, err)
+	}
+}
+
 func TestConcurrentIdempotentSameUser(t *testing.T) {
 	alloc, _ := newTestAllocator(t, "99")
 	ctx := context.Background()
