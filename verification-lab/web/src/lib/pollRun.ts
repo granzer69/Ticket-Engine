@@ -10,6 +10,7 @@ export function pollDeadlineMs(preset: string): number {
     case "claims":
     case "gates":
     case "phase-gates":
+    case "failure-lab":
       return 10 * 60_000;
     case "load-1k":
     case "1k":

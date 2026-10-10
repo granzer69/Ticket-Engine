@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"ticketengine/verification-lab/internal/failurelab"
 	"ticketengine/verification-lab/internal/metrics"
 	"ticketengine/verification-lab/internal/runner"
 )
@@ -29,7 +30,9 @@ type runRequest struct {
 	Preset          string   `json:"preset"`
 	Claims          []string `json:"claims"`
 	Gates           []string `json:"gates"`
+	Scenarios       []string `json:"scenarios"`
 	ConfirmHeavy    bool     `json:"confirm_heavy"`
+	ConfirmFault    bool     `json:"confirm_fault"`
 }
 
 func (s *Server) ListenAndServe() error {
@@ -44,6 +47,7 @@ func (s *Server) ListenAndServe() error {
 	mux.HandleFunc("/api/stream", s.handleSSE)
 	mux.HandleFunc("/api/runs", s.handleRuns)
 	mux.HandleFunc("/api/runs/", s.handleRunByID)
+	mux.HandleFunc("/api/failure-lab/scenarios", s.handleFailureLabCatalog)
 
 	staticHandler := s.staticHandler()
 	mux.Handle("/", staticHandler)
@@ -155,6 +159,12 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request) {
 		id, err = s.Engine.StartClaims(ctx, req.Claims)
 	case "gates", "phase-gates":
 		id, err = s.Engine.StartGates(ctx, req.Gates)
+	case "failure-lab":
+		if !req.ConfirmFault {
+			http.Error(w, "confirm_fault required for failure-lab preset", 400)
+			return
+		}
+		id, err = s.Engine.StartFailureLab(ctx, req.Scenarios)
 	case "1k", "load-1k":
 		id, err = s.Engine.StartBoundedLoad(ctx, "1k", 1_000)
 	case "10k", "load-10k":
@@ -206,6 +216,14 @@ func (s *Server) handleRunByID(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Disposition", "attachment; filename="+id+".json")
 	}
 	writeJSON(w, rep)
+}
+
+func (s *Server) handleFailureLabCatalog(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, failurelab.Catalog())
 }
 
 func writeJSON(w http.ResponseWriter, v interface{}) {

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"ticketengine/verification-lab/internal/claims"
+	"ticketengine/verification-lab/internal/failurelab"
 	"ticketengine/verification-lab/internal/loadgen"
 	"ticketengine/verification-lab/internal/metrics"
 
@@ -412,6 +413,66 @@ func (e *Engine) StartGates(ctx context.Context, gateIDs []string) (string, erro
 		}
 		if e.Hub != nil {
 			e.Hub.EmitRunEvent("run", "gates finished: "+rep.Status, id, id)
+		}
+	}()
+
+	return id, nil
+}
+
+func (e *Engine) StartFailureLab(ctx context.Context, scenarioIDs []string) (string, error) {
+	if len(scenarioIDs) == 0 {
+		scenarioIDs = failurelab.DefaultScenarioIDs
+	}
+	id := newRunID()
+	rep := &Report{
+		RunID:      id,
+		Preset:     "failure-lab",
+		Status:     "running",
+		TargetBase: e.cfg.TargetBase,
+		Extra: map[string]interface{}{
+			"failure_lab_catalog": failurelab.Catalog(),
+		},
+	}
+	e.mu.Lock()
+	e.runs[id] = rep
+	e.mu.Unlock()
+
+	go func() {
+		defer e.clearActiveRun()
+		e.setActiveRun(id, id)
+		if e.Hub != nil {
+			e.Hub.EmitRunEvent("run", "failure-lab started", id, id)
+		}
+		startSnap, _ := e.col.Collect(ctx)
+		repoRoot := e.cfg.RepoRoot
+		if repoRoot == "" {
+			repoRoot = claims.DiscoverRepoRoot()
+		}
+		results := failurelab.Run(ctx, failurelab.Opts{
+			RepoRoot:   repoRoot,
+			TargetBase: e.cfg.TargetBase,
+			APIKey:     e.cfg.APIKey,
+			RedisAddr:  e.cfg.RedisAddr,
+			MySQLDSN:   e.cfg.MySQLDSN,
+		}, e.col, scenarioIDs)
+		endSnap, _ := e.col.Collect(ctx)
+		status, failureReason := failurelab.SummarizeFailureRun(results)
+
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		rep.SnapshotStart = &startSnap
+		rep.SnapshotEnd = &endSnap
+		rep.Claims = results
+		rep.FieldProvenance = map[string]string{"failure_lab": metrics.Derived}
+		rep.Status = status
+		if failureReason != "" {
+			if rep.Extra == nil {
+				rep.Extra = map[string]interface{}{}
+			}
+			rep.Extra["failure_reason"] = failureReason
+		}
+		if e.Hub != nil {
+			e.Hub.EmitRunEvent("run", "failure-lab finished: "+rep.Status, id, id)
 		}
 	}()
 

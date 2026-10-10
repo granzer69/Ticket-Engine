@@ -15,7 +15,19 @@ export function ClaimsPanel() {
   const run = useLabStore((s) => s.run);
 
   const isGates = run?.preset === "gates" || run?.preset === "phase-gates";
+  const isFailure = run?.preset === "failure-lab";
   const rowIds = isGates ? GATE_IDS : INV_IDS;
+
+  if (isFailure) {
+    return (
+      <section className="panel claims-panel">
+        <div className="panel-head">
+          <h2>Verification</h2>
+          <span className="hint muted">Failure-lab results are in the Failure lab panel below.</span>
+        </div>
+      </section>
+    );
+  }
 
   const rows = useMemo(() => {
     const byId = new Map(run?.claims?.map((c) => [c.id, c]));

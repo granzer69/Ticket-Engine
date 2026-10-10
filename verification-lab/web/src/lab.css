@@ -415,6 +415,41 @@ button.danger {
   border-bottom: 1px solid var(--border);
 }
 
+.failure-lab-panel .warning-text {
+  color: #fbbf24;
+  font-size: 0.78rem;
+  margin: 0.25rem 0;
+}
+
+.failure-scenario-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.failure-scenario {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.78rem;
+}
+
+.failure-scenario-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.failure-scenario-title {
+  font-weight: 600;
+  margin-top: 0.15rem;
+}
+
+.manual-steps ol {
+  margin: 0.35rem 0 0 1.1rem;
+  padding: 0;
+}
+
 .badge {
   display: inline-block;
   font-size: 0.6rem;

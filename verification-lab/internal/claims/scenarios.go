@@ -37,6 +37,11 @@ type bookJSON struct {
 	UserID   int    `json:"user_id"`
 }
 
+// Book performs a single POST /book for lab scenarios.
+func (c Client) Book(ctx context.Context, userID int) (bookJSON, int, error) {
+	return c.book(ctx, userID)
+}
+
 func (c *Client) book(ctx context.Context, userID int) (bookJSON, int, error) {
 	client := c.HTTP
 	if client == nil {

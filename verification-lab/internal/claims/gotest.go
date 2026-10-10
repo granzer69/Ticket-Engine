@@ -114,6 +114,16 @@ func DiscoverRepoRoot() string {
 	return ""
 }
 
+// MySQLReachable reports whether the DSN accepts a ping.
+func MySQLReachable(mysqlDSN string) bool {
+	if mysqlDSN == "" {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	return pingMySQL(ctx, mysqlDSN)
+}
+
 // ServicesReachable reports whether Redis and MySQL DSN are likely usable for integration tests.
 func ServicesReachable(redisAddr, mysqlDSN string) bool {
 	if redisAddr == "" || mysqlDSN == "" {

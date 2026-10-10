@@ -5,6 +5,7 @@ import { Charts } from "./components/Charts";
 import { Timeline } from "./components/Timeline";
 import { RunControl } from "./components/RunControl";
 import { ClaimsPanel } from "./components/ClaimsPanel";
+import { FailureLabPanel } from "./components/FailureLabPanel";
 import { useTelemetrySSE } from "./hooks/useTelemetrySSE";
 
 export function App() {
@@ -23,6 +24,7 @@ export function App() {
           <RunControl />
           <Timeline />
           <ClaimsPanel />
+          <FailureLabPanel />
         </div>
       </div>
     </div>
