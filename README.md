@@ -10,10 +10,20 @@ When many users hit `/book` at once, classic row-level booking patterns contend 
 
 ![Architecture](./architecture.png)
 
+<<<<<<< HEAD
+Flow (current implementation):
+1. Client sends `POST /book` with `X-User-Id`.
+2. Redis Lua allocation is used for atomic allocation + idempotent replay behavior.
+3. Booking events are written to a Redis Stream.
+4. A separate **worker** process (`go run . worker`) consumes the stream and persists sold ticket ownership to MySQL.
+
+**Important:** the API server (`go run .`) does **not** run the persist consumer. A serve-only deployment accepts bookings into Redis but does not write `sold` rows to MySQL until a worker is running.
+=======
 1. Client `POST /book` with `X-User-Id` (optional `X-API-Key` if configured)
 2. Redis Lua: `HGET` prior booking → or `LPOP` + `HSET` + `XADD`
 3. Stream consumer writes sold state to MySQL
 4. Replay path re-enqueues persist if Redis says booked but MySQL lags
+>>>>>>> origin/main
 
 ## Tech stack
 
@@ -26,7 +36,18 @@ When many users hit `/book` at once, classic row-level booking patterns contend 
 | Load | k6 (`test.js`), legacy wrk Lua (`test.lua`) |
 | UI | React + Vite dashboards under `frontend/` (Dashboard, Login, Queue Simulation) |
 
+<<<<<<< HEAD
+## API surface
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `POST` | `/book` | Attempt booking for one user (`X-User-Id` required) |
+| `GET` | `/tickets/count` | Remaining tickets in Redis queue |
+| `GET` | `/metrics` | Request/success/failure counters |
+| `GET` | `/healthz` | Liveness probe |
+| `GET` | `/readyz` | Readiness probe (Redis + MySQL; consumer check is worker-only in a split deployment) |
+=======
 ## Key engineering decisions
+>>>>>>> origin/main
 
 - **Redis owns hot allocation**; MySQL owns durable sold state (eventual consistency by design)
 - **Idempotent user booking**: same `user_id` retries return the same `ticket_id` with HTTP 200
@@ -70,6 +91,49 @@ docker compose up
 # API: http://localhost:8080
 ```
 
+<<<<<<< HEAD
+This starts:
+- `mysql` (MySQL 8)
+- `redis` (Redis 7)
+- one-shot `seed` service (`go run . seed`)
+- `server` service (`go run .`) — HTTP API only
+- `worker` service (`go run . worker`) — stream consumer (required for MySQL persistence)
+
+Default API endpoint: `http://localhost:8080`
+
+## Local development
+If you already run MySQL and Redis locally:
+
+```bash
+go run . seed    # run once on empty DB
+go run . worker  # persist consumer (run alongside API)
+go run .         # start API server
+```
+
+Or run API + worker together: `make dev`
+
+Read-only drift check (no Redis/MySQL mutations; exit `0` clean, `1` drift, `2` error):
+
+```bash
+go run . reconcile
+```
+
+## Configuration
+Environment variables used by runtime and compose setup:
+
+| Variable | Purpose |
+|---|---|
+| `HTTP_PORT` | HTTP server port (default `8080`) |
+| `MYSQL_HOST` | MySQL host:port |
+| `MYSQL_USER` | MySQL username |
+| `MYSQL_PASSWORD` | MySQL password |
+| `MYSQL_DATABASE` | MySQL database name |
+| `REDIS_HOST` | Redis host:port |
+| `TICKET_API_KEY` | Optional API key for protected booking access |
+| `TICKET_CORS_ORIGIN` | Allowed CORS origin (default `*`) |
+
+## Testing and verification
+=======
 Local (MySQL + Redis already running):
 
 ```bash
@@ -79,6 +143,7 @@ go run . reconcile   # optional
 ```
 
 ## Testing
+>>>>>>> origin/main
 
 ```bash
 make test

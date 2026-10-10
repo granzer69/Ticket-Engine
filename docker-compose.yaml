@@ -84,6 +84,29 @@ services:
         condition: service_healthy
     command: ["sh", "-c", "go mod download && go run ."]
 
+  worker:
+    image: golang:1.22-bookworm
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - .:/app
+      - go_mod_cache:/go/pkg/mod
+    environment:
+      GOPROXY: https://proxy.golang.org,direct
+      MYSQL_HOST: mysql:3306
+      MYSQL_USER: ticket
+      MYSQL_PASSWORD: ticket
+      MYSQL_DATABASE: ticketdb
+      REDIS_HOST: redis:6379
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["sh", "-c", "go mod download && go run . worker"]
+
 volumes:
   mysql_data:
   redis_data:

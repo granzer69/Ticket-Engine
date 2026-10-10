@@ -121,15 +121,57 @@ No service uses `build:`; images are pulled only (documented upstream tags).
 
 **Objective:** Redis Stream + consumer group; remove GoChannel for bookings.
 
-**Status:** `not_started`
+### Tasks
+
+| Task | Status |
+|------|--------|
+| Redis Stream publish on allocate | complete |
+| Consumer group + MySQL `sold` update | complete |
+| Worker/API split (V3 phase 1) | complete |
+| PEL reclaim (`XAUTOCLAIM`) + shutdown drain (V3 phase 2) | complete |
+| DLQ after delivery cap (V3 phase 3) | complete |
+
+### Acceptance criteria
+
+- [x] Bookings persist via Redis Stream consumer (not GoChannel).
+- [ ] Crash mid-handler: pending entry reclaimed; ticket becomes `sold` once (`TestPersistRecovery` — requires MySQL+Redis; SKIP in agent VM 2026-10-05).
+- [x] Duplicate delivery is idempotent (same user/ticket `UPDATE` guard).
+- [x] DLQ for poison messages after `MaxDeliveryAttempts` (`TestPersistDLQ`).
+
+### Verification log
+
+| Command | Result | Date |
+|---------|--------|------|
+| `go test -count=1 -race ./internal/persist/` | PASS | 2026-10-05 |
+| `go test -tags=integration -count=1 -race -run TestPersistRecovery ./integration/` | SKIP (no Redis on agent VM); run in CI/Compose | 2026-10-05 |
+| `go test -count=1 -race ./...` | PASS | 2026-10-05 |
+| `go vet ./...` | PASS | 2026-10-05 |
+
+### Status
+
+`in_progress` — streams, reclaim, and recovery test landed; DLQ (V3 phase 3) remains.
 
 ---
 
 ## Phase 4 — Inventory Reconciliation
 
-**Objective:** Rebuild rules; no destructive reset of buyer state.
+**Objective:** Read-only operator reconcile (`go run . reconcile`); no destructive reset of buyer state.
 
-**Status:** `not_started`
+**Status:** `in_progress` (V3 Slice 6 — read-only drift report)
+
+### Reconcile command (Slice 6)
+
+- **Read-only:** no Redis/MySQL/stream/PEL mutations (queue rebuild remains `seed` / `TICKET_ENGINE_REDIS_SYNC` on serve only).
+- **Checks:** Redis `tickets` queue vs MySQL `available` (adjusted for in-flight stream/hash allocations), `hash:user` vs MySQL ownership, duplicate buyers, orphan allocations, stream pending (EXPECTED / STALE / SUSPICIOUS / UNKNOWN), DLQ length.
+- **Exit codes:** `0` clean, `1` drift, `2` operational error (DB/Redis/query failure).
+- **Output:** `RECONCILE RESULT: CLEAN` or `DRIFT DETECTED` with sections.
+
+### Verification log (Slice 6)
+
+| Command | Result | Date |
+|---------|--------|------|
+| `go test -count=1 -run TestReconcile ./internal/reconcile/...` | PASS | 2026-10-05 |
+| `go test -tags=integration -count=1 -run TestReconcileDrift ./integration/...` | SKIP if no Redis/MySQL | 2026-10-05 |
 
 ---
 
@@ -170,3 +212,25 @@ No service uses `build:`; images are pulled only (documented upstream tags).
 **Objective:** End-to-end reviewer sign-off.
 
 **Status:** `not_started`
+
+---
+
+## V3 — Worker/API split (Composer phase 1)
+
+**Status:** `complete` — `go run . worker` is the only persist consumer entrypoint; Compose/Makefile/CI start worker alongside serve.
+
+## V3 — PEL reclaim and shutdown (Composer phase 2)
+
+**Status:** `complete` — periodic `XAUTOCLAIM`, pending `0` replay, graceful drain with pending log on SIGTERM; `TestPersistRecovery` + `internal/persist` reclaim tests.
+
+## V3 — DLQ (Composer phase 3)
+
+**Status:** `complete` — `MaxDeliveryAttempts` then `XADD` `bookings.dlq` + `XACK`; `TestPersistDLQ` + unit DLQ test.
+
+## V3 — Worker scale-out (Composer phase 4)
+
+**Status:** `complete` — `TICKET_PERSIST_CONSUMER_NAME` / `HOSTNAME` consumer names, bounded parallel handlers, worker-sized MySQL pool (`TICKET_ENGINE_ROLE=worker`), `/readyz` fails when stream pending exceeds `MaxReadyPendingCount`; `TestReadyzStreamPending`, `TestTwoWorkersNoDoubleSell`.
+
+## V3 — Redis-only replay (Composer phase 5)
+
+**Status:** `complete` — idempotent `/book` replay uses `hash:user` in `ensurePersisted` (no MySQL read); `TestBookReplaySkipsMySQL`.

@@ -17,7 +17,7 @@ func TestPartialInventoryRefused(t *testing.T) {
 	if err := gdb.Exec("DELETE FROM tickets").Error; err != nil {
 		t.Fatalf("cleanup: %v", err)
 	}
-	if err := gdb.Exec("INSERT INTO tickets (user_id) VALUES (0)").Error; err != nil {
+	if err := gdb.Exec("INSERT INTO tickets (user_id, state) VALUES (NULL, 'available')").Error; err != nil {
 		t.Fatalf("insert: %v", err)
 	}
 	var total int64

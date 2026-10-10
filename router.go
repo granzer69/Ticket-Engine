@@ -10,7 +10,9 @@ import (
 	"strconv"
 	"sync/atomic"
 
+	"ticketengine/internal/booking"
 	"ticketengine/internal/persist"
+	"ticketengine/internal/security"
 )
 
 // JSON response types for structured API output
@@ -51,10 +53,10 @@ func apiKeyMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		return next
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("X-API-Key") != required {
+		if !security.APIKeyValid(r.Header.Get("X-API-Key"), required) {
 			writeJSON(w, http.StatusUnauthorized, BookingResponse{
 				Status:  "error",
-				Message: "Invalid API key",
+				Message: "Unauthorized",
 			})
 			return
 		}
@@ -137,11 +139,11 @@ func ticketHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func ensurePersisted(ctx context.Context, ticketID, userID int) error {
-	sold, err := persist.IsSold(db, ticketID)
+	redisTicket, ok, err := booking.TicketForUser(ctx, redisClient, userID)
 	if err != nil {
 		return err
 	}
-	if sold {
+	if ok && redisTicket == ticketID {
 		return nil
 	}
 	return persist.EnqueueReplay(ctx, redisClient, ticketID, userID)

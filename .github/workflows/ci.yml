@@ -30,10 +30,21 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
       - name: Unit tests
         run: |
           go test ./...
           go test -race ./...
+      - name: Seed inventory
+        env:
+          MYSQL_HOST: 127.0.0.1:3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: root
+          MYSQL_DATABASE: ticketdb
+          REDIS_HOST: 127.0.0.1:6379
+        run: go run . seed
       - name: Integration tests
         env:
           MYSQL_HOST: 127.0.0.1:3306
@@ -42,3 +53,8 @@ jobs:
           MYSQL_DATABASE: ticketdb
           REDIS_HOST: 127.0.0.1:6379
         run: go test -tags=integration ./integration/...
+      - name: Verification lab UI build
+        run: |
+          cd verification-lab/web
+          npm ci
+          npm run build

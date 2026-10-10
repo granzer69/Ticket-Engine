@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Verification Lab</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0b0f14; --panel:#121820; --text:#e6edf3; --muted:#8b949e; --accent:#3fb950; }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+    body { margin:0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); }
+    main { max-width: 960px; margin: 0 auto; padding: 1.5rem; }
+    .badge { font-size: 0.7rem; padding: 0.15rem 0.4rem; border-radius: 4px; background: #1f2933; color: var(--muted); }
+    pre { background: var(--panel); padding: 1rem; overflow: auto; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Verification Lab</h1>
+    <p>Build the Vite UI: <code>cd verification-lab/web && npm ci && npm run build</code></p>
+    <p class="badge">FALLBACK UI</p>
+    <pre id="out">Connecting…</pre>
+  </main>
+  <script>
+    const es = new EventSource('/api/stream');
+    es.addEventListener('snapshot', e => { document.getElementById('out').textContent = JSON.stringify(JSON.parse(e.data), null, 2); });
+  </script>
+</body>
+</html>

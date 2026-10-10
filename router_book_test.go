@@ -5,7 +5,9 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/go-redis/redis/v8"
@@ -57,4 +59,126 @@ func TestBookHandlerIdempotentHTTP(t *testing.T) {
 			t.Fatalf("request %d status %d body %s", i, res.Code, res.Body.String())
 		}
 	}
+}
+
+func TestBookReplaySkipsMySQL(t *testing.T) {
+	testDB, err := gorm.Open(sqlite.Open("file:replayskip?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("sqlite: %v", err)
+	}
+	if err := testDB.AutoMigrate(&Ticket{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if err := testDB.Create(&Ticket{ID: 77, State: "available"}).Error; err != nil {
+		t.Fatalf("seed row: %v", err)
+	}
+	db = testDB
+
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis: %v", err)
+	}
+	redisClient = redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	ctx := context.Background()
+	if err := redisClient.LPush(ctx, booking.KeyQueue, "77").Err(); err != nil {
+		t.Fatalf("lpush: %v", err)
+	}
+	alloc, err := booking.NewAllocator(ctx, redisClient)
+	if err != nil {
+		t.Fatalf("allocator: %v", err)
+	}
+	ticketAllocator = alloc
+
+	handler := apiKeyMiddleware(ticketHandler)
+	req := httptest.NewRequest(http.MethodPost, "/book", bytes.NewReader(nil))
+	req.Header.Set(httpUserHeader, "55")
+	res := httptest.NewRecorder()
+	handler(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("first book status %d body %s", res.Code, res.Body.String())
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("db handle: %v", err)
+	}
+	if err := sqlDB.Close(); err != nil {
+		t.Fatalf("close mysql: %v", err)
+	}
+
+	req2 := httptest.NewRequest(http.MethodPost, "/book", bytes.NewReader(nil))
+	req2.Header.Set(httpUserHeader, "55")
+	res2 := httptest.NewRecorder()
+	handler(res2, req2)
+	if res2.Code != http.StatusOK {
+		t.Fatalf("replay after mysql close status %d body %s", res2.Code, res2.Body.String())
+	}
+}
+
+func TestBookEventuallyPersistsViaConsumer(t *testing.T) {
+	testDB, err := gorm.Open(sqlite.Open("file:bookpersist?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("sqlite: %v", err)
+	}
+	if err := testDB.AutoMigrate(&Ticket{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	const ticketID = 88
+	const userID = 12
+	if err := testDB.Create(&Ticket{ID: ticketID, State: "available"}).Error; err != nil {
+		t.Fatalf("seed row: %v", err)
+	}
+	db = testDB
+
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis: %v", err)
+	}
+	redisClient = redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	ctx := context.Background()
+	if err := redisClient.LPush(ctx, booking.KeyQueue, strconv.Itoa(ticketID)).Err(); err != nil {
+		t.Fatalf("lpush: %v", err)
+	}
+	alloc, err := booking.NewAllocator(ctx, redisClient)
+	if err != nil {
+		t.Fatalf("allocator: %v", err)
+	}
+	ticketAllocator = alloc
+	if err := persist.NewConsumer(redisClient, db, "persist-claim-test").EnsureGroup(ctx); err != nil {
+		t.Fatalf("group: %v", err)
+	}
+
+	handler := apiKeyMiddleware(ticketHandler)
+	req := httptest.NewRequest(http.MethodPost, "/book", bytes.NewReader(nil))
+	req.Header.Set(httpUserHeader, strconv.Itoa(userID))
+	res := httptest.NewRecorder()
+	handler(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("book status %d body %s", res.Code, res.Body.String())
+	}
+
+	consumer := persist.NewConsumer(redisClient, db, "persist-claim-test")
+	runCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	go consumer.Run(runCtx)
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		var state string
+		if err := testDB.Raw("SELECT state FROM tickets WHERE id = ?", ticketID).Scan(&state).Error; err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		if state == "sold" {
+			var uid *int
+			if err := testDB.Raw("SELECT user_id FROM tickets WHERE id = ?", ticketID).Scan(&uid).Error; err != nil {
+				t.Fatalf("user scan: %v", err)
+			}
+			if uid == nil || *uid != userID {
+				t.Fatalf("expected user_id %d, got %v", userID, uid)
+			}
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("ticket not persisted as sold within timeout")
 }

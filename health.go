@@ -26,8 +26,19 @@ func readyzHandler(consumer *persist.Consumer) http.HandlerFunc {
 			http.Error(w, "mysql unavailable", http.StatusServiceUnavailable)
 			return
 		}
+		pending, err := persist.GroupPendingCountRDB(ctx, redisClient)
+		if err != nil {
+			http.Error(w, "stream pending check failed", http.StatusServiceUnavailable)
+			return
+		}
+		if pending > persist.MaxReadyPendingCount {
+			http.Error(w, "stream pending too high", http.StatusServiceUnavailable)
+			return
+		}
 		if consumer == nil {
-			http.Error(w, "consumer unavailable", http.StatusServiceUnavailable)
+			// Serve mode: stream backlog check above is sufficient for API readiness.
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("ready"))
 			return
 		}
 		w.WriteHeader(http.StatusOK)
