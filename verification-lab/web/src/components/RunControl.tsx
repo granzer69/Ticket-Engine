@@ -64,6 +64,17 @@ export function RunControl() {
     start({ preset: "heavy-100k", confirm_heavy: true });
   };
 
+  const confirmBenchmarkExhaustion = () => {
+    if (
+      !window.confirm(
+        "Run benchmark-exhaustion-15k (100k logical attempts; assumes 15k ticket seed)?",
+      )
+    ) {
+      return;
+    }
+    start({ preset: "benchmark-exhaustion-15k", confirm_heavy: true });
+  };
+
   const isGatesRun = run?.preset === "gates" || run?.preset === "phase-gates";
 
   return (
@@ -94,6 +105,21 @@ export function RunControl() {
         </button>
         <button className="danger" disabled={busy} onClick={confirmHeavy}>
           Heavy · 100k
+        </button>
+      </div>
+      <div className="actions benchmark-actions">
+        <span className="hint muted">Benchmarks (15k seed assumption in export)</span>
+        <button disabled={busy} onClick={() => start({ preset: "benchmark-smoke" })}>
+          Bench smoke · 100
+        </button>
+        <button disabled={busy} onClick={() => start({ preset: "benchmark-exhaustion-mini" })}>
+          Bench exhaust mini · 5k
+        </button>
+        <button disabled={busy} onClick={() => start({ preset: "benchmark-saturated-15k" })}>
+          Bench saturated · 15k
+        </button>
+        <button className="danger" disabled={busy} onClick={confirmBenchmarkExhaustion}>
+          Bench exhaustion · 100k
         </button>
       </div>
       <div className="phase-gates">

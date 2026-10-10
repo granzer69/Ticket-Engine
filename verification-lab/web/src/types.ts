@@ -54,6 +54,7 @@ export type RunReport = {
   logical_requests?: number;
   duration_ms?: number;
   latency_p95_ms?: number;
+  latency_p99_ms?: number;
   snapshot_start?: Snapshot;
   snapshot_end?: Snapshot;
   /** Client-side or API error text (POST failure, poll timeout). */

@@ -31,6 +31,7 @@ type Stats struct {
 	DurationMs      int64
 	LatencyP50Ms    int64
 	LatencyP95Ms    int64
+	LatencyP99Ms    int64
 }
 
 // Run issues POST /book with distinct X-User-Id per logical request (unless UserIDStart reused by caller).
@@ -122,7 +123,7 @@ func Run(ctx context.Context, opt Options) (Stats, error) {
 	wg.Wait()
 
 	sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
-	p50, p95 := percentile(latencies, 50), percentile(latencies, 95)
+	p50, p95, p99 := percentile(latencies, 50), percentile(latencies, 95), percentile(latencies, 99)
 
 	return Stats{
 		LogicalRequests: opt.Total,
@@ -133,6 +134,7 @@ func Run(ctx context.Context, opt Options) (Stats, error) {
 		DurationMs:      time.Since(start).Milliseconds(),
 		LatencyP50Ms:    p50,
 		LatencyP95Ms:    p95,
+		LatencyP99Ms:    p99,
 	}, nil
 }
 

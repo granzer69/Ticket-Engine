@@ -169,6 +169,14 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		id, err = s.Engine.StartHeavy(ctx)
+	case "benchmark-smoke", "benchmark-exhaustion-mini", "benchmark-saturated-15k":
+		id, err = s.Engine.StartBenchmark(ctx, strings.ToLower(req.Preset))
+	case "benchmark-exhaustion-15k":
+		if !req.ConfirmHeavy {
+			http.Error(w, "confirm_heavy required for benchmark-exhaustion-15k preset", 400)
+			return
+		}
+		id, err = s.Engine.StartBenchmark(ctx, "benchmark-exhaustion-15k")
 	default:
 		http.Error(w, "unknown preset", 400)
 		return

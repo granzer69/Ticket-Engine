@@ -1,5 +1,11 @@
 import { useMemo } from "react";
-import { isLoadPreset, loadRunHumanLine, loadRunStatsLine, loadRunStatusLabel } from "../lib/runSummary";
+import {
+  benchmarkSummaryLine,
+  isLoadPreset,
+  loadRunHumanLine,
+  loadRunStatsLine,
+  loadRunStatusLabel,
+} from "../lib/runSummary";
 import { useLabStore } from "../store/labStore";
 
 const INV_IDS = ["INV-1", "INV-2", "INV-3", "INV-4", "INV-5", "INV-6", "INV-7"];
@@ -45,6 +51,9 @@ export function ClaimsPanel() {
               <>
                 <span className="hint run-stats-line">{loadRunStatsLine(run)}</span>
                 <span className="hint run-human-line">{loadRunHumanLine(run)}</span>
+                {benchmarkSummaryLine(run) && (
+                  <span className="hint benchmark-line">{benchmarkSummaryLine(run)}</span>
+                )}
               </>
             )}
             {run.extra?.failure_reason && (

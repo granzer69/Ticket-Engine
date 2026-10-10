@@ -24,7 +24,13 @@ export function pollDeadlineMs(preset: string): number {
       return 30 * 60_000;
     case "heavy-100k":
     case "100k":
+    case "benchmark-exhaustion-15k":
       return 45 * 60_000;
+    case "benchmark-saturated-15k":
+      return 30 * 60_000;
+    case "benchmark-smoke":
+    case "benchmark-exhaustion-mini":
+      return 10 * 60_000;
     default:
       return 5 * 60_000;
   }

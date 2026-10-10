@@ -35,6 +35,7 @@ type Report struct {
 	Errors           int                    `json:"errors,omitempty"`
 	DurationMs       int64                  `json:"duration_ms,omitempty"`
 	LatencyP95Ms     int64                  `json:"latency_p95_ms,omitempty"`
+	LatencyP99Ms     int64                  `json:"latency_p99_ms,omitempty"`
 	Claims           []claims.Result        `json:"claims,omitempty"`
 	SnapshotStart    *metrics.Snapshot      `json:"snapshot_start,omitempty"`
 	SnapshotEnd      *metrics.Snapshot      `json:"snapshot_end,omitempty"`
@@ -130,7 +131,7 @@ func (e *Engine) StartSmoke(ctx context.Context) (string, error) {
 		rep.FieldProvenance = map[string]string{
 			"load_stats": metrics.Derived,
 		}
-		e.finalizeLoadReport(rep, startSnap, endSnap, st, err, WorkloadAllSuccess, nil)
+		e.finalizeLoadReport(rep, startSnap, endSnap, st, err, WorkloadAllSuccess, nil, nil)
 		if e.Hub != nil {
 			e.Hub.EmitRunEvent("run", "smoke finished: "+rep.Status, id, id)
 		}
@@ -147,24 +148,24 @@ type loadPresetSpec struct {
 }
 
 func (e *Engine) StartHeavy(ctx context.Context) (string, error) {
-	return e.startExhaustionLoad(ctx, loadPresetSpec{
+	return e.startLoad(ctx, loadPresetSpec{
 		Preset:      "heavy-100k",
 		Total:       100_000,
 		UserIDStart: freshUserIDBase(100_000),
 		Workers:     32,
 		Timeout:     15 * time.Second,
-	})
+	}, WorkloadExhaustion, nil)
 }
 
 func (e *Engine) StartBoundedLoad(ctx context.Context, preset string, total int) (string, error) {
 	workers := boundedWorkers(total)
-	return e.startExhaustionLoad(ctx, loadPresetSpec{
+	return e.startLoad(ctx, loadPresetSpec{
 		Preset:      preset,
 		Total:       total,
 		UserIDStart: 800_000 + total,
 		Workers:     workers,
 		Timeout:     15 * time.Second,
-	})
+	}, WorkloadExhaustion, nil)
 }
 
 func boundedWorkers(total int) int {
@@ -180,18 +181,23 @@ func boundedWorkers(total int) int {
 	}
 }
 
-func (e *Engine) startExhaustionLoad(ctx context.Context, spec loadPresetSpec) (string, error) {
+func (e *Engine) startLoad(ctx context.Context, spec loadPresetSpec, mode string, benchProf *BenchmarkProfile) (string, error) {
 	id := newRunID()
+	extra := map[string]interface{}{
+		"workload_mode":   mode,
+		"requested_total": spec.Total,
+	}
+	if benchProf != nil {
+		extra["assumed_inventory_seed"] = benchProf.AssumedInventorySeed
+		extra["benchmark_profile"] = benchProf.Preset
+	}
 	rep := &Report{
 		RunID:           id,
 		Preset:          spec.Preset,
 		Status:          "running",
 		TargetBase:      e.cfg.TargetBase,
 		LogicalRequests: spec.Total,
-		Extra: map[string]interface{}{
-			"workload_mode":   WorkloadExhaustion,
-			"requested_total": spec.Total,
-		},
+		Extra:           extra,
 	}
 	e.mu.Lock()
 	e.runs[id] = rep
@@ -226,7 +232,7 @@ func (e *Engine) startExhaustionLoad(ctx context.Context, spec loadPresetSpec) (
 		defer e.mu.Unlock()
 		rep.SnapshotEnd = &endSnap
 		rep.FieldProvenance = map[string]string{"load_stats": metrics.Derived}
-		e.finalizeLoadReport(rep, startSnap, endSnap, st, err, WorkloadExhaustion, inv)
+		e.finalizeLoadReport(rep, startSnap, endSnap, st, err, mode, inv, benchProf)
 		if e.Hub != nil {
 			e.Hub.EmitRunEvent("run", spec.Preset+" finished: "+rep.Status, id, id)
 		}
@@ -245,7 +251,7 @@ func freshUserIDBase(span int) int {
 	return base
 }
 
-func (e *Engine) finalizeLoadReport(rep *Report, startSnap, endSnap metrics.Snapshot, st loadgen.Stats, runErr error, mode string, inventoryAtStart *int64) {
+func (e *Engine) finalizeLoadReport(rep *Report, startSnap, endSnap metrics.Snapshot, st loadgen.Stats, runErr error, mode string, inventoryAtStart *int64, benchProf *BenchmarkProfile) {
 	if runErr != nil {
 		rep.Status = "failed"
 		if rep.Extra == nil {
@@ -261,6 +267,7 @@ func (e *Engine) finalizeLoadReport(rep *Report, startSnap, endSnap metrics.Snap
 	rep.Errors = st.Errors + st.OtherStatus
 	rep.DurationMs = st.DurationMs
 	rep.LatencyP95Ms = st.LatencyP95Ms
+	rep.LatencyP99Ms = st.LatencyP99Ms
 	if rep.SnapshotStart == nil {
 		rep.SnapshotStart = &startSnap
 	}
@@ -276,6 +283,15 @@ func (e *Engine) finalizeLoadReport(rep *Report, startSnap, endSnap metrics.Snap
 	}
 	if consumed := queueConsumedFromSnapshots(&startSnap, &endSnap); consumed != nil && rep.Extra != nil {
 		rep.Extra["queue_consumed"] = *consumed
+	}
+	if IsBenchmarkPreset(rep.Preset) {
+		prof := benchProf
+		if prof == nil {
+			if p, ok := benchmarkProfiles()[rep.Preset]; ok {
+				prof = &p
+			}
+		}
+		attachBenchmarkSummary(rep, prof, st, &startSnap, &endSnap)
 	}
 }
 
