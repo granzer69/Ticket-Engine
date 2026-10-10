@@ -1,6 +1,9 @@
 import { useCallback } from "react";
 import { pollDeadlineLabel, pollRun } from "../lib/pollRun";
 import { useLabStore } from "../store/labStore";
+
+const GATE_IDS = ["P1", "P2", "P3", "P4", "P5", "P6", "P7"];
+
 export function RunControl() {
   const busy = useLabStore((s) => s.busy);
   const setBusy = useLabStore((s) => s.setBusy);
@@ -8,6 +11,8 @@ export function RunControl() {
   const run = useLabStore((s) => s.run);
   const clearChart = useLabStore((s) => s.clearChart);
   const pushRunSnaps = useLabStore((s) => s.pushChartFromRunSnapshots);
+
+  const gateById = (id: string) => run?.claims?.find((c) => c.id === id);
 
   const start = useCallback(
     async (body: Record<string, unknown>) => {
@@ -59,6 +64,8 @@ export function RunControl() {
     start({ preset: "heavy-100k", confirm_heavy: true });
   };
 
+  const isGatesRun = run?.preset === "gates" || run?.preset === "phase-gates";
+
   return (
     <section className="panel run-panel">
       <div className="panel-head">
@@ -82,19 +89,39 @@ export function RunControl() {
         <button disabled={busy} onClick={() => start({ preset: "claims" })}>
           INV-1..7
         </button>
+        <button disabled={busy} onClick={() => start({ preset: "gates" })}>
+          Gates P1..P7
+        </button>
         <button className="danger" disabled={busy} onClick={confirmHeavy}>
           Heavy · 100k
         </button>
       </div>
       <div className="phase-gates">
         <h3>Phase gates (P1..P7)</h3>
-        <p className="muted">NOT RUN — scenarios not wired in lab runner (see claim registry).</p>
-        <ul>
-          {["P1", "P2", "P3", "P4", "P5", "P6", "P7"].map((p) => (
-            <li key={p}>
-              <span>{p}</span> <span className="status NOT_RUN">NOT RUN</span>
-            </li>
-          ))}
+        <p className="muted">Runs go test subprocesses + live probes (readyz, API key) against VERILAB_TARGET.</p>
+        <ul className="gate-list">
+          {GATE_IDS.map((p) => {
+            const g = gateById(p);
+            const status = g?.status ?? (isGatesRun && run?.status === "running" ? "RUNNING" : "NOT RUN");
+            const ranAt = g?.evidence?.ran_at;
+            return (
+              <li key={p}>
+                <span className="gate-id">{p}</span>
+                <span className={`status ${status.replace(" ", "_")}`}>{status}</span>
+                <button
+                  type="button"
+                  className="gate-run"
+                  disabled={busy}
+                  onClick={() => start({ preset: "gates", gates: [p] })}
+                >
+                  Run
+                </button>
+                {g?.failure_reason && <span className="hint fail-reason">{g.failure_reason}</span>}
+                {g?.message && <span className="msg">{g.message}</span>}
+                {ranAt != null && <span className="hint">{String(ranAt)}</span>}
+              </li>
+            );
+          })}
         </ul>
       </div>
     </section>

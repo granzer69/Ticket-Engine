@@ -28,6 +28,7 @@ type Server struct {
 type runRequest struct {
 	Preset          string   `json:"preset"`
 	Claims          []string `json:"claims"`
+	Gates           []string `json:"gates"`
 	ConfirmHeavy    bool     `json:"confirm_heavy"`
 }
 
@@ -152,6 +153,8 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request) {
 		id, err = s.Engine.StartSmoke(ctx)
 	case "claims":
 		id, err = s.Engine.StartClaims(ctx, req.Claims)
+	case "gates", "phase-gates":
+		id, err = s.Engine.StartGates(ctx, req.Gates)
 	case "1k", "load-1k":
 		id, err = s.Engine.StartBoundedLoad(ctx, "1k", 1_000)
 	case "10k", "load-10k":

@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"ticketengine/verification-lab/internal/api"
+	"ticketengine/verification-lab/internal/claims"
 	"ticketengine/verification-lab/internal/metrics"
 	"ticketengine/verification-lab/internal/runner"
 	"ticketengine/verification-lab/internal/target"
@@ -26,11 +27,13 @@ func main() {
 	mysqlHost := env("MYSQL_HOST", "127.0.0.1:3306")
 	dsn := metrics.DSN(mysqlHost, env("MYSQL_USER", "ticket"), env("MYSQL_PASSWORD", "ticket"), env("MYSQL_DATABASE", "ticketdb"))
 
+	repoRoot := env("VERILAB_REPO_ROOT", claims.DiscoverRepoRoot())
 	eng := runner.New(runner.Config{
 		TargetBase: base,
 		APIKey:     os.Getenv("TICKET_API_KEY"),
 		RedisAddr:  env("REDIS_HOST", "127.0.0.1:6379"),
 		MySQLDSN:   dsn,
+		RepoRoot:   repoRoot,
 	})
 	hub := metrics.NewHub(eng.Collector(), eng)
 	eng.Hub = hub

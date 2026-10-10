@@ -38,6 +38,7 @@ export type ClaimResult = {
   id: string;
   status: string;
   message: string;
+  failure_reason?: string;
   evidence: Record<string, unknown>;
   registry_tests: string[];
 };

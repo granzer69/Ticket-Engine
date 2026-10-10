@@ -20,6 +20,7 @@ type Config struct {
 	APIKey     string
 	RedisAddr  string
 	MySQLDSN   string
+	RepoRoot   string
 }
 
 type Report struct {
@@ -338,6 +339,63 @@ func (e *Engine) StartClaims(ctx context.Context, claimIDs []string) (string, er
 		rep.Status = "completed"
 		if e.Hub != nil {
 			e.Hub.EmitRunEvent("run", "claims finished", id, id)
+		}
+	}()
+
+	return id, nil
+}
+
+func (e *Engine) StartGates(ctx context.Context, gateIDs []string) (string, error) {
+	if len(gateIDs) == 0 {
+		gateIDs = claims.DefaultGateIDs
+	}
+	id := newRunID()
+	rep := &Report{
+		RunID:      id,
+		Preset:     "gates",
+		Status:     "running",
+		TargetBase: e.cfg.TargetBase,
+	}
+	e.mu.Lock()
+	e.runs[id] = rep
+	e.mu.Unlock()
+
+	go func() {
+		defer e.clearActiveRun()
+		e.setActiveRun(id, id)
+		if e.Hub != nil {
+			e.Hub.EmitRunEvent("run", "gates started", id, id)
+		}
+		startSnap, _ := e.col.Collect(ctx)
+		repoRoot := e.cfg.RepoRoot
+		if repoRoot == "" {
+			repoRoot = claims.DiscoverRepoRoot()
+		}
+		results := claims.RunGates(ctx, claims.GateOpts{
+			RepoRoot:   repoRoot,
+			TargetBase: e.cfg.TargetBase,
+			APIKey:     e.cfg.APIKey,
+			RedisAddr:  e.cfg.RedisAddr,
+			MySQLDSN:   e.cfg.MySQLDSN,
+		}, gateIDs)
+		endSnap, _ := e.col.Collect(ctx)
+		status, failureReason := claims.SummarizeGateRun(results)
+
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		rep.SnapshotStart = &startSnap
+		rep.SnapshotEnd = &endSnap
+		rep.Claims = results
+		rep.FieldProvenance = map[string]string{"gates": metrics.Derived}
+		rep.Status = status
+		if failureReason != "" {
+			if rep.Extra == nil {
+				rep.Extra = map[string]interface{}{}
+			}
+			rep.Extra["failure_reason"] = failureReason
+		}
+		if e.Hub != nil {
+			e.Hub.EmitRunEvent("run", "gates finished: "+rep.Status, id, id)
 		}
 	}()
 
