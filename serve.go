@@ -10,10 +10,15 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"ticketengine/internal/prodconfig"
 )
 
 // bootstrapAPIServer initializes dependencies for HTTP serve mode. It does not start the persist consumer.
 func bootstrapAPIServer() {
+	if err := prodconfig.Validate(); err != nil {
+		log.Fatalf("config: %v", err)
+	}
 	log.Println("Starting system initialization...")
 	initMySQL()
 	initRedis()

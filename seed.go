@@ -4,9 +4,22 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"strconv"
 
 	"ticketengine/internal/inventory"
 )
+
+func seedTargetCount() int {
+	if v := os.Getenv("TICKET_SEED_COUNT"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n <= 0 {
+			log.Fatalf("seed: invalid TICKET_SEED_COUNT %q", v)
+		}
+		return n
+	}
+	return defaultTicketCount
+}
 
 // SeedInventory creates the initial ticket rows when the database is empty.
 // It never tops up partial inventory (restart-safe).
@@ -16,7 +29,8 @@ func SeedInventory() error {
 		return fmt.Errorf("seed: count tickets: %w", err)
 	}
 
-	action, err := inventory.SeedDecision(total, ticketCount)
+	target := seedTargetCount()
+	action, err := inventory.SeedDecision(total, target)
 	if err != nil {
 		return err
 	}
@@ -25,9 +39,9 @@ func SeedInventory() error {
 		return syncRedisQueue(true)
 	}
 
-	log.Printf("seed: inserting %d tickets into MySQL...", ticketCount)
+	log.Printf("seed: inserting %d tickets into MySQL...", target)
 	var batch []Ticket
-	for i := 0; i < ticketCount; i++ {
+	for i := 0; i < target; i++ {
 		batch = append(batch, Ticket{State: "available"})
 	}
 	if err := db.CreateInBatches(batch, 1000).Error; err != nil {

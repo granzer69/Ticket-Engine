@@ -220,7 +220,7 @@ func scenarioRestartInventory(ctx context.Context, opts Opts, r claims.Result) c
 	meta := Catalog()[1]
 	r.Evidence["manual_checklist"] = meta.ManualSteps
 
-	seed := claims.RunGoTest(ctx, opts.RepoRoot, "./internal/inventory", "TestSeedDecision", nil)
+	seed := claims.RunGoTest(ctx, opts.RepoRoot, "./internal/inventory", "TestSeedDecision", nil, nil)
 	r.Evidence["unit_seed_decision"] = seed
 
 	if opts.RepoRoot == "" {
@@ -243,7 +243,7 @@ func scenarioRestartInventory(ctx context.Context, opts Opts, r claims.Result) c
 		return r
 	}
 
-	integ := claims.RunGoTest(ctx, opts.RepoRoot, "./integration", "TestRestartDoesNotMintInventory", []string{"-tags=integration"})
+	integ := claims.RunGoTest(ctx, opts.RepoRoot, "./integration", "TestRestartDoesNotMintInventory", []string{"-tags=integration"}, claims.IntegrationEnvFromOS())
 	r.Evidence["integration_go_test"] = integ
 	if integ.Passed {
 		r.Status = claims.StatusPass
@@ -268,7 +268,7 @@ func scenarioDLQGrowth(ctx context.Context, opts Opts, col metrics.Collector, r 
 	r.Evidence["dlq_provenance"] = snap.FieldProvenance["redis"]
 	r.Evidence["p3_registry"] = Registry["dlq-growth"]
 
-	unit := claims.RunGoTest(ctx, opts.RepoRoot, "./internal/persist", "TestMovesFailedMessageToDLQ", nil)
+	unit := claims.RunGoTest(ctx, opts.RepoRoot, "./internal/persist", "TestMovesFailedMessageToDLQ", nil, nil)
 	r.Evidence["unit_go_test"] = unit
 
 	if snap.FieldProvenance["redis"] != metrics.Live && snap.Redis.DLQLen == 0 {

@@ -27,7 +27,7 @@ Flow (current implementation):
 | Persist | Redis Streams consumer (`internal/persist`), MySQL 8 via GORM |
 | Ops | Docker Compose (mysql, redis, seed, server, worker), Makefile test targets |
 | Load | k6 (`test.js`), legacy wrk Lua (`test.lua`) |
-| UI | React + Vite dashboards under `frontend/` (Dashboard, Login, Queue Simulation) |
+| UI | **Verification Lab** (`verification-lab/`) — live telemetry console; legacy demos under `frontend/` |
 
 ## Key engineering decisions
 
@@ -35,7 +35,7 @@ Flow (current implementation):
 - **Idempotent user booking**: same `user_id` retries return the same `ticket_id` with HTTP 200
 - **Explicit seed**: `go run . seed` mints inventory (default 15,000); server start does not auto-mint
 - **Race-aware metrics**: counters protected for concurrent `/metrics` under load
-- **V2 phased roadmap** documented under `docs/` — phases 1–2 complete; later phases (full recovery/observability/security/CI bench gate) tracked in `docs/V2_PROGRESS.md`
+- **V3** worker split, stream consumer, PEL reclaim, DLQ, read-only reconcile, verification lab — see `docs/V2_PROGRESS.md` and `docs/VERIFICATION_LAB.md`
 
 ## Features
 
@@ -62,7 +62,7 @@ curl -X POST http://localhost:8080/book -H "X-User-Id: 101"
 
 ## Performance / results
 
-**No published throughput or latency numbers yet.** `docs/BENCHMARKS.md` is a measurement plan only — append runs with git SHA when executed. The repo includes k6 scripts and correctness checks (unique ticket↔user mapping, inventory conservation) to support that work.
+**Recorded lab benchmarks** (smoke, exhaustion, gates) are in [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) with git SHA and honest caveats (15k seed vs 100k attempts). k6 (`test.js`) cross-checks via nightly workflow.
 
 Do **not** treat any old GitHub description claim of unverified request volume as a measured result.
 
@@ -79,6 +79,12 @@ This starts:
 - one-shot `seed` service (`go run . seed`)
 - `server` service (`go run .`) — HTTP API only
 - `worker` service (`go run . worker`) — stream consumer (required for MySQL persistence)
+
+Optional Compose profiles:
+
+- `docker compose --profile multi-worker up` — adds `worker-b` (second consumer name) for P4-style tests
+- `docker compose --profile lab up` — adds `verilab` on port 8090 (builds UI on first start)
+- Set `REDIS_PASSWORD` in `.env` to enable Redis AUTH for all app services
 
 ## Local development
 
@@ -108,8 +114,21 @@ go run . reconcile
 | `MYSQL_PASSWORD` | MySQL password |
 | `MYSQL_DATABASE` | MySQL database name |
 | `REDIS_HOST` | Redis host:port |
+| `REDIS_PASSWORD` | Redis AUTH password when enabled |
 | `TICKET_API_KEY` | Optional API key for protected booking access |
 | `TICKET_CORS_ORIGIN` | Allowed CORS origin (default `*`) |
+| `TICKET_ENV` | Set to `production` for fail-fast API key + non-wildcard CORS |
+| `TICKET_SEED_COUNT` | Dev-only seed row count (default 15000; never auto-mint on serve) |
+| `TICKET_STREAM_MAXLEN` | Approximate `MAXLEN ~` on bookings stream XADD (optional backpressure) |
+
+## Verification Lab
+
+Observability and proof console (gates P1–P7, benchmarks, failure lab). Requires API + worker + Redis + MySQL.
+
+```bash
+make build-verilab-ui
+make run-verilab   # set VERILAB_TARGET, MYSQL_*, REDIS_HOST — see docs/VERIFICATION_LAB.md
+```
 
 ## Testing
 
@@ -117,6 +136,7 @@ go run . reconcile
 make test
 make test-race
 make test-integration   # needs MySQL + Redis
+make test-verilab
 ```
 
 ## Project structure
@@ -125,11 +145,12 @@ make test-integration   # needs MySQL + Redis
 internal/booking/   Lua allocator
 internal/persist/   stream consumer
 migrations/         SQL schema
-docs/               V2 spec, progress, failure matrix, benchmark plan
-frontend/           React/Vite UI experiments
+docs/               V2 spec, progress, VERIFICATION_LAB.md, benchmark plan
+verification-lab/   verilab control plane + React console
+frontend/           Legacy React demos (not wired to lab telemetry)
 test.js             k6 load script
 ```
 
 ## Future improvements
 
-See `docs/V2_PROGRESS.md` for remaining phases: reconciliation rules, DLQ/backoff, richer observability, security hardening, CI benchmark gate, and recorded load results.
+See `docs/V2_PROGRESS.md` for phase status; `docs/V3_SECURITY_PROOF.md` for Slice 7 evidence.

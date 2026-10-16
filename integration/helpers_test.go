@@ -77,6 +77,9 @@ func persistWorkerEnv() []string {
 		"MYSQL_DATABASE="+integrationDatabase(),
 		"REDIS_HOST="+envDefault("REDIS_HOST", "127.0.0.1:6379"),
 	)
+	if pw := os.Getenv("REDIS_PASSWORD"); pw != "" {
+		env = append(env, "REDIS_PASSWORD="+pw)
+	}
 	return env
 }
 

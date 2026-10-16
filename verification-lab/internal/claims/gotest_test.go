@@ -15,7 +15,7 @@ func TestRunGoTestP5InRepo(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
-	out := RunGoTest(ctx, root, ".", "TestBookReplaySkipsMySQL", nil)
+	out := RunGoTest(ctx, root, ".", "TestBookReplaySkipsMySQL", nil, nil)
 	if !out.Passed {
 		t.Fatalf("expected pass: %+v\n%s", out, out.Output)
 	}

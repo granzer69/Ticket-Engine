@@ -4,7 +4,9 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"os"
 	"strconv"
+	"strings"
 
 	"github.com/go-redis/redis/v8"
 )
@@ -30,17 +32,27 @@ type Result struct {
 
 // Allocator performs atomic Redis ticket allocation.
 type Allocator struct {
-	client *redis.Client
-	sha    string
+	client        *redis.Client
+	sha           string
+	streamMaxLen  int64 // 0 = unlimited XADD
 }
 
 // NewAllocator loads the Lua script into Redis.
+// Optional env TICKET_STREAM_MAXLEN enables approximate MAXLEN ~ on bookings.stream XADD.
 func NewAllocator(ctx context.Context, client *redis.Client) (*Allocator, error) {
 	sha, err := client.ScriptLoad(ctx, allocateLua).Result()
 	if err != nil {
 		return nil, fmt.Errorf("booking: script load: %w", err)
 	}
-	return &Allocator{client: client, sha: sha}, nil
+	var maxlen int64
+	if v := strings.TrimSpace(os.Getenv("TICKET_STREAM_MAXLEN")); v != "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || n <= 0 {
+			return nil, fmt.Errorf("booking: invalid TICKET_STREAM_MAXLEN %q", v)
+		}
+		maxlen = n
+	}
+	return &Allocator{client: client, sha: sha, streamMaxLen: maxlen}, nil
 }
 
 // Allocate reserves one ticket for userID or returns a prior reservation (idempotent).
@@ -49,7 +61,11 @@ func (a *Allocator) Allocate(ctx context.Context, userID int) (Result, error) {
 		return Result{}, fmt.Errorf("booking: invalid user id %d", userID)
 	}
 	uid := strconv.Itoa(userID)
-	raw, err := a.client.EvalSha(ctx, a.sha, []string{KeyQueue, KeyUserBooking, KeyStream}, uid).Result()
+	args := []interface{}{uid}
+	if a.streamMaxLen > 0 {
+		args = append(args, strconv.FormatInt(a.streamMaxLen, 10))
+	}
+	raw, err := a.client.EvalSha(ctx, a.sha, []string{KeyQueue, KeyUserBooking, KeyStream}, args...).Result()
 	if err != nil {
 		return Result{}, fmt.Errorf("booking: eval: %w", err)
 	}

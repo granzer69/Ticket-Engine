@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"ticketengine/internal/persist"
+	"ticketengine/internal/prodconfig"
 )
 
 // runPersistConsumer is the only entry that should invoke consumer.Run (overridden in tests).
@@ -36,6 +37,9 @@ func resolvePersistConsumerName() string {
 }
 
 func runWorkerCommand() {
+	if err := prodconfig.Validate(); err != nil {
+		log.Fatalf("config: %v", err)
+	}
 	log.Println("Starting persist worker...")
 	os.Setenv("TICKET_ENGINE_ROLE", "worker")
 	initMySQL()

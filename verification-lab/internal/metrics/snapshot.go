@@ -83,10 +83,11 @@ type Snapshot struct {
 }
 
 type Collector struct {
-	TargetBase string
-	HTTPClient *http.Client
-	RedisAddr  string
-	MySQLDSN   string
+	TargetBase    string
+	HTTPClient    *http.Client
+	RedisAddr     string
+	RedisPassword string
+	MySQLDSN      string
 }
 
 func (c Collector) Collect(ctx context.Context) (Snapshot, error) {
@@ -117,7 +118,11 @@ func (c Collector) Collect(ctx context.Context) (Snapshot, error) {
 	}
 
 	if c.RedisAddr != "" {
-		rdb := redis.NewClient(&redis.Options{Addr: c.RedisAddr})
+		opts := &redis.Options{Addr: c.RedisAddr}
+		if c.RedisPassword != "" {
+			opts.Password = c.RedisPassword
+		}
+		rdb := redis.NewClient(opts)
 		defer rdb.Close()
 		if err := rdb.Ping(ctx).Err(); err == nil {
 			if n, err := rdb.LLen(ctx, booking.KeyQueue).Result(); err == nil {

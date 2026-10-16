@@ -2,7 +2,7 @@
 
 This document records **reproducible evidence** for security claims. A claim is **proven** only when it has an automated test (or CI step), an executed result, and a reference to that CI run.
 
-**Status:** Slice 7 not complete — sections below are **planned** until implementation and CI runs land.
+**Status:** P0 Slice 7 items implemented (2026-10-16). Rate limit / Prometheus remain deferred. Lab preset `security` runs S7 go-test probes.
 
 ## How to use
 
@@ -18,12 +18,12 @@ For each claim:
 | ID | Claim | Test package / command | Evidence |
 |----|-------|------------------------|----------|
 | S7-API-1 | API key required when configured | `go test -run TestAPIKey -count=1 ./...` | Local PASS (claim-tests branch); CI pending |
-| S7-CORS-1 | CORS allows only configured origin | `go test -run TestCORS -count=1 ./...` | *Pending* |
-| S7-REDIS-1 | Redis AUTH when configured | `go test -tags=integration -run TestRedisAuth ./integration/...` | *Pending* |
-| S7-LOG-1 | Logs omit secrets and raw user ids | `go test -run TestLogRedaction -count=1 ./...` | *Pending* |
+| S7-CORS-1 | CORS allows only configured origin | `go test -run TestCORS -count=1 ./...` | Local PASS 2026-10-16 |
+| S7-REDIS-1 | Redis AUTH when configured | `go test -tags=integration -run TestRedisAuth ./integration/...` | Local PASS 2026-10-16 |
+| S7-LOG-1 | Logs omit secrets and raw user ids | `go test -run TestLogRedaction -count=1 ./...` | Local PASS 2026-10-16 |
 | S7-SEC-1 | No hardcoded production secrets | CI GitGuardian + `go test -run TestSecrets -count=1 ./...` | GitGuardian: see PR checks; custom test *Pending* |
-| S7-PROD-1 | Production profile fails without required config | `go test -run TestProductionConfig -count=1 ./...` | *Pending* |
-| S7-RATE-1 | Rate limit on `/book` (if in scope) | `go test -run TestRateLimit -count=1 ./...` | *Pending* |
+| S7-PROD-1 | Production profile fails without required config | `go test -run TestProductionConfig -count=1 ./...` | Local PASS 2026-10-16; `prodconfig.Validate()` on API + worker |
+| S7-RATE-1 | Rate limit on `/book` (if in scope) | `go test -run TestRateLimit -count=1 ./...` | **Deferred** |
 
 ---
 
@@ -69,11 +69,11 @@ For each claim:
 - Disallowed → origin header not reflected (or request blocked per policy).
 - Preflight → 200 with expected `Access-Control-Allow-Methods` / headers.
 
-**Actual result:** *Not recorded yet.*
+**Actual result (2026-10-16):** `go test -count=1 -run 'TestCORS_' ./...` — PASS (`router_cors_test.go`).
 
-**CI evidence:** *Pending.*
+**CI evidence:** Pending next `CI` workflow on `main`.
 
-**Known limitations:** Default `TICKET_CORS_ORIGIN=*` is dev-only; document production value.
+**Known limitations:** Default `TICKET_CORS_ORIGIN=*` is dev-only; production requires explicit origin via `prodconfig`.
 
 ---
 

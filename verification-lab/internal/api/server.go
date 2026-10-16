@@ -159,6 +159,8 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request) {
 		id, err = s.Engine.StartClaims(ctx, req.Claims)
 	case "gates", "phase-gates":
 		id, err = s.Engine.StartGates(ctx, req.Gates)
+	case "security", "security-s7":
+		id, err = s.Engine.StartSecurity(ctx)
 	case "failure-lab":
 		if !req.ConfirmFault {
 			http.Error(w, "confirm_fault required for failure-lab preset", 400)

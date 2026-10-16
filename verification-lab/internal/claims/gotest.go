@@ -25,7 +25,8 @@ type GoTestOutcome struct {
 }
 
 // RunGoTest runs `go test` in repoRoot for pkg with -run pattern.
-func RunGoTest(ctx context.Context, repoRoot, pkg, runPattern string, extraArgs []string) GoTestOutcome {
+// testEnv is appended to the process environment (e.g. MYSQL_HOST for integration tests).
+func RunGoTest(ctx context.Context, repoRoot, pkg, runPattern string, extraArgs []string, testEnv []string) GoTestOutcome {
 	out := GoTestOutcome{Command: "", ExitCode: -1}
 	if repoRoot == "" {
 		out.Output = "VERILAB_REPO_ROOT not set and go.mod not found from cwd"
@@ -48,7 +49,7 @@ func RunGoTest(ctx context.Context, repoRoot, pkg, runPattern string, extraArgs 
 
 	cmd := exec.CommandContext(ctx, "go", args...)
 	cmd.Dir = repoRoot
-	cmd.Env = os.Environ()
+	cmd.Env = append(os.Environ(), testEnv...)
 
 	var buf bytes.Buffer
 	cmd.Stdout = &buf

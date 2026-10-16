@@ -28,11 +28,21 @@ services:
     restart: unless-stopped
     ports:
       - "6379:6379"
-    command: ["redis-server", "--appendonly", "yes"]
+    command:
+      - sh
+      - -c
+      - |
+        if [ -n "$${REDIS_PASSWORD}" ]; then
+          exec redis-server --appendonly yes --requirepass "$${REDIS_PASSWORD}"
+        else
+          exec redis-server --appendonly yes
+        fi
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "sh", "-c", "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" ping; else redis-cli ping; fi"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -43,13 +53,14 @@ services:
     volumes:
       - .:/app
       - go_mod_cache:/go/pkg/mod
-    environment:
+    environment: &app_env
       GOPROXY: https://proxy.golang.org,direct
       MYSQL_HOST: mysql:3306
       MYSQL_USER: ticket
       MYSQL_PASSWORD: ticket
       MYSQL_DATABASE: ticketdb
       REDIS_HOST: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     depends_on:
       mysql:
         condition: service_healthy
@@ -68,13 +79,9 @@ services:
       - .:/app
       - go_mod_cache:/go/pkg/mod
     environment:
-      GOPROXY: https://proxy.golang.org,direct
-      MYSQL_HOST: mysql:3306
-      MYSQL_USER: ticket
-      MYSQL_PASSWORD: ticket
-      MYSQL_DATABASE: ticketdb
-      REDIS_HOST: redis:6379
+      <<: *app_env
       HTTP_PORT: "8080"
+      TICKET_STREAM_MAXLEN: ${TICKET_STREAM_MAXLEN:-}
     depends_on:
       seed:
         condition: service_completed_successfully
@@ -92,12 +99,7 @@ services:
       - .:/app
       - go_mod_cache:/go/pkg/mod
     environment:
-      GOPROXY: https://proxy.golang.org,direct
-      MYSQL_HOST: mysql:3306
-      MYSQL_USER: ticket
-      MYSQL_PASSWORD: ticket
-      MYSQL_DATABASE: ticketdb
-      REDIS_HOST: redis:6379
+      <<: *app_env
     depends_on:
       seed:
         condition: service_completed_successfully
@@ -106,6 +108,49 @@ services:
       redis:
         condition: service_healthy
     command: ["sh", "-c", "go mod download && go run . worker"]
+
+  worker-b:
+    profiles: ["multi-worker"]
+    image: golang:1.22-bookworm
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - .:/app
+      - go_mod_cache:/go/pkg/mod
+    environment:
+      <<: *app_env
+      TICKET_PERSIST_CONSUMER_NAME: worker-b
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["sh", "-c", "go mod download && go run . worker"]
+
+  verilab:
+    profiles: ["lab"]
+    image: golang:1.22-bookworm
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    working_dir: /app
+    volumes:
+      - .:/app
+      - go_mod_cache:/go/pkg/mod
+    environment:
+      <<: *app_env
+      VERILAB_TARGET: http://server:8080
+      VERILAB_HTTP: ":8090"
+      VERILAB_WEB_DIST: /app/verification-lab/web/dist
+      VERILAB_REPO_ROOT: /app
+    depends_on:
+      server:
+        condition: service_started
+      worker:
+        condition: service_started
+    command: ["sh", "-c", "go mod download && (test -d verification-lab/web/dist || (cd verification-lab/web && npm ci && npm run build)) && go run ./verification-lab/cmd/verilab"]
 
 volumes:
   mysql_data:

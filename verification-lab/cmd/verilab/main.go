@@ -29,11 +29,12 @@ func main() {
 
 	repoRoot := env("VERILAB_REPO_ROOT", claims.DiscoverRepoRoot())
 	eng := runner.New(runner.Config{
-		TargetBase: base,
-		APIKey:     os.Getenv("TICKET_API_KEY"),
-		RedisAddr:  env("REDIS_HOST", "127.0.0.1:6379"),
-		MySQLDSN:   dsn,
-		RepoRoot:   repoRoot,
+		TargetBase:    base,
+		APIKey:        os.Getenv("TICKET_API_KEY"),
+		RedisAddr:     env("REDIS_HOST", "127.0.0.1:6379"),
+		RedisPassword: os.Getenv("REDIS_PASSWORD"),
+		MySQLDSN:      dsn,
+		RepoRoot:      repoRoot,
 	})
 	hub := metrics.NewHub(eng.Collector(), eng)
 	eng.Hub = hub

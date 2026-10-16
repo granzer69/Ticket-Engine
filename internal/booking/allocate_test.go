@@ -73,6 +73,37 @@ func TestAllocateSoldOut(t *testing.T) {
 	}
 }
 
+func TestStreamMaxLenTrimsStream(t *testing.T) {
+	t.Setenv("TICKET_STREAM_MAXLEN", "2")
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis: %v", err)
+	}
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	ctx := context.Background()
+	for _, tid := range []string{"1", "2", "3"} {
+		if err := client.LPush(ctx, KeyQueue, tid).Err(); err != nil {
+			t.Fatalf("lpush: %v", err)
+		}
+	}
+	alloc, err := NewAllocator(ctx, client)
+	if err != nil {
+		t.Fatalf("allocator: %v", err)
+	}
+	for uid := 1; uid <= 3; uid++ {
+		if _, err := alloc.Allocate(ctx, uid); err != nil {
+			t.Fatalf("allocate %d: %v", uid, err)
+		}
+	}
+	n, err := client.XLen(ctx, KeyStream).Result()
+	if err != nil {
+		t.Fatalf("xlen: %v", err)
+	}
+	if n > 2 {
+		t.Fatalf("expected stream trimmed to ~2 entries, got %d", n)
+	}
+}
+
 func TestAllocateInvalidUser(t *testing.T) {
 	alloc, _ := newTestAllocator(t, "1")
 	_, err := alloc.Allocate(context.Background(), 0)

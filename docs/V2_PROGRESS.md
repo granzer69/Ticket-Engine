@@ -149,7 +149,7 @@ No service uses `build:`; images are pulled only (documented upstream tags).
 
 ### Status
 
-`in_progress` — streams, reclaim, and recovery test landed; DLQ (V3 phase 3) remains.
+`complete` — streams, reclaim, DLQ landed; recovery integration runs in CI when Redis/MySQL services are up.
 
 ---
 
@@ -157,7 +157,7 @@ No service uses `build:`; images are pulled only (documented upstream tags).
 
 **Objective:** Read-only operator reconcile (`go run . reconcile`); no destructive reset of buyer state.
 
-**Status:** `in_progress` (V3 Slice 6 — read-only drift report)
+**Status:** `complete` (V3 Slice 6 — read-only drift report)
 
 ### Reconcile command (Slice 6)
 
@@ -177,33 +177,33 @@ No service uses `build:`; images are pulled only (documented upstream tags).
 
 ## Phase 5 — Reliability and Recovery
 
-**Objective:** Backoff, DLQ, graceful shutdown.
+**Objective:** DLQ, graceful shutdown, PEL reclaim (fixed retry cap; exponential backoff deferred).
 
-**Status:** `not_started`
+**Status:** `complete` (V3 phases 2–3)
 
 ---
 
 ## Phase 6 — Observability
 
-**Objective:** Health, metrics, structured logs, dashboard truth.
+**Objective:** Health, metrics, engineering console with truthful telemetry.
 
-**Status:** `not_started`
+**Status:** `in_progress` — JSON `/metrics`, `/readyz`, **Verification Lab** SSE console (`verification-lab/`); structured JSON logs deferred.
 
 ---
 
 ## Phase 7 — Security
 
-**Objective:** Auth token, CORS, rate limits.
+**Objective:** API key, CORS production lock, prod fail-fast, log redaction (rate limit deferred).
 
-**Status:** `not_started`
+**Status:** `complete` (P0) — CORS tests, `REDIS_PASSWORD`, prod fail-fast (`prodconfig`), log redaction; lab `security` preset; rate limit deferred — see `docs/V3_SECURITY_PROOF.md`.
 
 ---
 
 ## Phase 8 — Benchmarking and CI
 
-**Objective:** V1/V2 benchmark gate + CI.
+**Objective:** Recorded benchmarks + CI.
 
-**Status:** `not_started`
+**Status:** `in_progress` — lab benchmark presets + `docs/BENCHMARKS.md` results; k6 nightly workflow optional.
 
 ---
 
@@ -234,3 +234,7 @@ No service uses `build:`; images are pulled only (documented upstream tags).
 ## V3 — Redis-only replay (Composer phase 5)
 
 **Status:** `complete` — idempotent `/book` replay uses `hash:user` in `ensurePersisted` (no MySQL read); `TestBookReplaySkipsMySQL`.
+
+## V3 — Verification Lab (merged PR #10)
+
+**Status:** `complete` — `verification-lab/cmd/verilab`; presets: smoke, gates, claims, benchmarks, failure-lab; see `docs/VERIFICATION_LAB.md`.

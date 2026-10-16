@@ -77,7 +77,7 @@ func runGate(ctx context.Context, opts GateOpts, id string) Result {
 }
 
 func gateP1(ctx context.Context, opts GateOpts, r Result) Result {
-	got := RunGoTest(ctx, opts.RepoRoot, ".", "TestServeDoesNotStartConsumer|TestWorkerCommandStartsConsumer", nil)
+	got := RunGoTest(ctx, opts.RepoRoot, ".", "TestServeDoesNotStartConsumer|TestWorkerCommandStartsConsumer", nil, nil)
 	r.Evidence["go_test"] = got
 	if got.Skipped && opts.RepoRoot == "" {
 		return inconclusive(r, "repo root unavailable for go test", "repo_root_missing")
@@ -94,7 +94,7 @@ func gateP1(ctx context.Context, opts GateOpts, r Result) Result {
 }
 
 func gateP2(ctx context.Context, opts GateOpts, r Result) Result {
-	unit := RunGoTest(ctx, opts.RepoRoot, "./internal/persist", "TestReclaimStalePending|TestConsumerReadsOwnPending", nil)
+	unit := RunGoTest(ctx, opts.RepoRoot, "./internal/persist", "TestReclaimStalePending|TestConsumerReadsOwnPending", nil, nil)
 	r.Evidence["unit_go_test"] = unit
 	if unit.Skipped && opts.RepoRoot == "" {
 		return inconclusive(r, "repo root unavailable", "repo_root_missing")
@@ -112,7 +112,7 @@ func gateP2(ctx context.Context, opts GateOpts, r Result) Result {
 		r.Evidence["integration"] = "skipped"
 		return r
 	}
-	integ := RunGoTest(ctx, opts.RepoRoot, "./integration", "TestPersistRecovery", []string{"-tags=integration"})
+	integ := RunGoTest(ctx, opts.RepoRoot, "./integration", "TestPersistRecovery", []string{"-tags=integration"}, IntegrationEnvFromOS())
 	r.Evidence["integration_go_test"] = integ
 	if integ.Passed {
 		r.Status = StatusPass
@@ -126,7 +126,7 @@ func gateP2(ctx context.Context, opts GateOpts, r Result) Result {
 }
 
 func gateP3(ctx context.Context, opts GateOpts, r Result) Result {
-	unit := RunGoTest(ctx, opts.RepoRoot, "./internal/persist", "TestMovesFailedMessageToDLQ", nil)
+	unit := RunGoTest(ctx, opts.RepoRoot, "./internal/persist", "TestMovesFailedMessageToDLQ", nil, nil)
 	r.Evidence["unit_go_test"] = unit
 	if unit.Skipped && opts.RepoRoot == "" {
 		return inconclusive(r, "repo root unavailable", "repo_root_missing")
@@ -143,7 +143,7 @@ func gateP3(ctx context.Context, opts GateOpts, r Result) Result {
 		r.FailureReason = "integration_services_unavailable"
 		return r
 	}
-	integ := RunGoTest(ctx, opts.RepoRoot, "./integration", "TestPersistDLQ", []string{"-tags=integration"})
+	integ := RunGoTest(ctx, opts.RepoRoot, "./integration", "TestPersistDLQ", []string{"-tags=integration"}, IntegrationEnvFromOS())
 	r.Evidence["integration_go_test"] = integ
 	if integ.Passed {
 		r.Status = StatusPass
@@ -157,7 +157,7 @@ func gateP3(ctx context.Context, opts GateOpts, r Result) Result {
 }
 
 func gateP4(ctx context.Context, opts GateOpts, r Result) Result {
-	unit := RunGoTest(ctx, opts.RepoRoot, ".", "TestReadyzStreamPending", nil)
+	unit := RunGoTest(ctx, opts.RepoRoot, ".", "TestReadyzStreamPending", nil, nil)
 	r.Evidence["unit_go_test"] = unit
 	if unit.Skipped && opts.RepoRoot == "" {
 		return inconclusive(r, "repo root unavailable", "repo_root_missing")
@@ -185,7 +185,7 @@ func gateP4(ctx context.Context, opts GateOpts, r Result) Result {
 		r.FailureReason = "multi_worker_unavailable"
 		return r
 	}
-	integ := RunGoTest(ctx, opts.RepoRoot, "./integration", "TestTwoWorkersNoDoubleSell", []string{"-tags=integration"})
+	integ := RunGoTest(ctx, opts.RepoRoot, "./integration", "TestTwoWorkersNoDoubleSell", []string{"-tags=integration"}, IntegrationEnvFromOS())
 	r.Evidence["integration_go_test"] = integ
 	if integ.Passed {
 		r.Status = StatusPass
@@ -199,7 +199,7 @@ func gateP4(ctx context.Context, opts GateOpts, r Result) Result {
 }
 
 func gateP5(ctx context.Context, opts GateOpts, r Result) Result {
-	got := RunGoTest(ctx, opts.RepoRoot, ".", "TestBookReplaySkipsMySQL", nil)
+	got := RunGoTest(ctx, opts.RepoRoot, ".", "TestBookReplaySkipsMySQL", nil, nil)
 	r.Evidence["go_test"] = got
 	if got.Skipped && opts.RepoRoot == "" {
 		return inconclusive(r, "repo root unavailable", "repo_root_missing")
@@ -216,7 +216,7 @@ func gateP5(ctx context.Context, opts GateOpts, r Result) Result {
 }
 
 func gateP6(ctx context.Context, opts GateOpts, r Result) Result {
-	unit := RunGoTest(ctx, opts.RepoRoot, "./internal/reconcile", "TestReconcile", nil)
+	unit := RunGoTest(ctx, opts.RepoRoot, "./internal/reconcile", "TestReconcile", nil, nil)
 	r.Evidence["unit_go_test"] = unit
 	if unit.Skipped && opts.RepoRoot == "" {
 		return inconclusive(r, "repo root unavailable", "repo_root_missing")
@@ -233,7 +233,7 @@ func gateP6(ctx context.Context, opts GateOpts, r Result) Result {
 		r.Evidence["integration"] = "skipped_no_services"
 		return r
 	}
-	integ := RunGoTest(ctx, opts.RepoRoot, "./integration", "TestReconcileCLIReadOnly", []string{"-tags=integration"})
+	integ := RunGoTest(ctx, opts.RepoRoot, "./integration", "TestReconcileCLIReadOnly", []string{"-tags=integration"}, IntegrationEnvFromOS())
 	r.Evidence["integration_go_test"] = integ
 	if integ.Passed {
 		r.Status = StatusPass
@@ -247,7 +247,7 @@ func gateP6(ctx context.Context, opts GateOpts, r Result) Result {
 }
 
 func gateP7(ctx context.Context, opts GateOpts, r Result) Result {
-	got := RunGoTest(ctx, opts.RepoRoot, ".", "TestAPIKey_", nil)
+	got := RunGoTest(ctx, opts.RepoRoot, ".", "TestAPIKey_", nil, nil)
 	r.Evidence["go_test"] = got
 	if got.Skipped && opts.RepoRoot == "" {
 		return inconclusive(r, "repo root unavailable", "repo_root_missing")

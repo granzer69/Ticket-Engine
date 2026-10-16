@@ -17,11 +17,12 @@ import (
 )
 
 type Config struct {
-	TargetBase string
-	APIKey     string
-	RedisAddr  string
-	MySQLDSN   string
-	RepoRoot   string
+	TargetBase    string
+	APIKey        string
+	RedisAddr     string
+	RedisPassword string
+	MySQLDSN      string
+	RepoRoot      string
 }
 
 type Report struct {
@@ -81,9 +82,10 @@ func New(cfg Config) *Engine {
 		cfg: cfg,
 		runs: map[string]*Report{},
 		col: metrics.Collector{
-			TargetBase: cfg.TargetBase,
-			RedisAddr:  cfg.RedisAddr,
-			MySQLDSN:   cfg.MySQLDSN,
+			TargetBase:    cfg.TargetBase,
+			RedisAddr:     cfg.RedisAddr,
+			RedisPassword: cfg.RedisPassword,
+			MySQLDSN:      cfg.MySQLDSN,
 		},
 	}
 }
@@ -413,6 +415,54 @@ func (e *Engine) StartGates(ctx context.Context, gateIDs []string) (string, erro
 		}
 		if e.Hub != nil {
 			e.Hub.EmitRunEvent("run", "gates finished: "+rep.Status, id, id)
+		}
+	}()
+
+	return id, nil
+}
+
+func (e *Engine) StartSecurity(ctx context.Context) (string, error) {
+	id := newRunID()
+	rep := &Report{
+		RunID:      id,
+		Preset:     "security",
+		Status:     "running",
+		TargetBase: e.cfg.TargetBase,
+	}
+	e.mu.Lock()
+	e.runs[id] = rep
+	e.mu.Unlock()
+
+	go func() {
+		defer e.clearActiveRun()
+		e.setActiveRun(id, id)
+		if e.Hub != nil {
+			e.Hub.EmitRunEvent("run", "security started", id, id)
+		}
+		startSnap, _ := e.col.Collect(ctx)
+		repoRoot := e.cfg.RepoRoot
+		if repoRoot == "" {
+			repoRoot = claims.DiscoverRepoRoot()
+		}
+		results := claims.RunSecurityClaims(ctx, claims.SecurityOpts{RepoRoot: repoRoot})
+		endSnap, _ := e.col.Collect(ctx)
+		status := "completed"
+		for _, cr := range results {
+			if cr.Status == claims.StatusFail {
+				status = "failed"
+				break
+			}
+		}
+
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		rep.SnapshotStart = &startSnap
+		rep.SnapshotEnd = &endSnap
+		rep.Claims = results
+		rep.FieldProvenance = map[string]string{"security": metrics.Derived}
+		rep.Status = status
+		if e.Hub != nil {
+			e.Hub.EmitRunEvent("run", "security finished: "+rep.Status, id, id)
 		}
 	}()
 

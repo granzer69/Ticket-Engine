@@ -3,6 +3,7 @@
 -- KEYS[2] = user booking hash (field: user id, value: ticket id)
 -- KEYS[3] = bookings stream
 -- ARGV[1] = user id string
+-- ARGV[2] = optional stream MAXLEN (~) trim count; empty = no trim
 --
 -- Returns {status, ticket_id}
 -- status: 0 = newly allocated, 1 = idempotent replay, 2 = sold out
@@ -18,5 +19,10 @@ if not ticket then
 end
 
 redis.call('HSET', KEYS[2], ARGV[1], ticket)
-redis.call('XADD', KEYS[3], '*', 'ticket_id', ticket, 'user_id', ARGV[1])
+local maxlen = ARGV[2]
+if maxlen and maxlen ~= '' then
+  redis.call('XADD', KEYS[3], 'MAXLEN', '~', maxlen, '*', 'ticket_id', ticket, 'user_id', ARGV[1])
+else
+  redis.call('XADD', KEYS[3], '*', 'ticket_id', ticket, 'user_id', ARGV[1])
+end
 return {0, ticket}

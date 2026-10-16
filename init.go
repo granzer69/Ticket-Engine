@@ -16,7 +16,7 @@ const (
 	queueTicket    = "tickets"
 	hashUser       = "hash:user"
 	httpUserHeader = "X-User-Id"
-	ticketCount    = 15000
+	defaultTicketCount = 15000
 )
 
 var (
@@ -73,11 +73,15 @@ func initRedis() {
 	if redisClient != nil {
 		return
 	}
-	redisClient = redis.NewClient(&redis.Options{
+	opts := &redis.Options{
 		Addr:     redisHost,
 		DB:       0,
 		PoolSize: 500,
-	})
+	}
+	if pw := os.Getenv("REDIS_PASSWORD"); pw != "" {
+		opts.Password = pw
+	}
+	redisClient = redis.NewClient(opts)
 	if _, err := redisClient.Ping(context.Background()).Result(); err != nil {
 		log.Fatalf("failed to connect to Redis at %s: %v", redisHost, err)
 	}
